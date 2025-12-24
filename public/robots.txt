@@ -1,0 +1,13 @@
+# GOXMR - Privacy First
+# Robots are welcome to index, but crawlers should be respectful.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Block aggressive scrapers
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /

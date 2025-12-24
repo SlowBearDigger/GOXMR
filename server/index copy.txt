@@ -1,0 +1,809 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const db = require('./db');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const NodeCache = require('node-cache');
+const sharp = require('sharp');
+
+const {
+    generateRegistrationOptions,
+    verifyRegistrationResponse,
+    generateAuthenticationOptions,
+    verifyAuthenticationResponse,
+} = require('@simplewebauthn/server');
+
+// Relying Party (RP) Configuration
+// Relying Party (RP) Configuration
+const rpName = 'GoXMR Sovereign';
+const rpID = 'localhost'; // Change to actual domain in production (e.g. goxmr.click)
+// Accept both Vite's 5173 and common 3000/3001 ports by default
+// CONFIGURACIÓN DE ORÍGENES (Colocar al inicio)
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+];
+
+// In-memory challenge store (Use Redis for production)
+const challengeStore = new Map();
+const app = express();
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'goxmr_secret_key_change_me_in_prod';
+
+// Move logger to top for absolute visibility
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} [${req.method}] ${req.url}`);
+    next();
+});
+
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" } // Allow images to be served
+}));
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true
+}));
+app.use(express.json());
+
+// 1. Rate Limiting & Anti-Cracking
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: { error: "Too many requests, please try again later." }
+});
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Stricter limit for auth: 10 attempts
+    message: { error: "Too many login attempts, please try again in 15 minutes." }
+});
+
+// Apply general limiter to all API routes (Fixed prefix)
+app.use('/api', apiLimiter);
+
+// 2. Simple Cache Implementation
+const profileCache = new NodeCache({ stdTTL: 300, checkperiod: 60 }); // 5 min TTL
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', version: '1.2.5-DEBUG-FIX', port: PORT });
+});
+
+app.get('/api/ping', (req, res) => {
+    res.json({ pong: true, time: new Date().toISOString() });
+});
+
+// Check Username Availability
+app.get('/api/check-username/:username', async (req, res) => {
+    console.log(`[DEBUG] HIT check-username for: ${req.params.username}`);
+    try {
+        const username = req.params.username.toLowerCase();
+        // Validation: matches registration requirements
+        if (!/^[a-zA-Z0-9_]{1,30}$/.test(username)) {
+            console.log(`[DEBUG] Invalid format: ${username}`);
+            return res.json({ available: false, error: 'Invalid format (A-Z, 0-9, _ only)' });
+        }
+
+        const existingUser = await dbGet('SELECT id FROM users WHERE LOWER(username) = ?', [username]);
+        console.log(`[DEBUG] Result for ${username}: ${!existingUser}`);
+        res.json({ available: !existingUser });
+    } catch (err) {
+        console.error('[CRITICAL] /api/check-username Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+// 3. Database Indexing & Migration Optimization
+db.serialize(() => {
+    db.run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+    // Ensure design_config exists
+    db.run('ALTER TABLE users ADD COLUMN design_config TEXT', (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+            console.error('Migration Error (design_config):', err);
+        }
+    });
+    // Ensure recovery_hash exists (Sovereign Recovery)
+    db.run('ALTER TABLE users ADD COLUMN recovery_hash TEXT', (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+            console.error('Migration Error (recovery_hash):', err);
+        }
+    });
+});
+
+// Helper for Promisified DB queries
+const dbGet = (query, params) => {
+    return new Promise((resolve, reject) => {
+        db.get(query, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+        });
+    });
+};
+
+const dbRun = (query, params) => {
+    return new Promise((resolve, reject) => {
+        db.run(query, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+        });
+    });
+};
+
+// Multer Setup
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Ensure uploads dir exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        const filetypes = /jpeg|jpg|png|gif|webp/;
+        const items = filetypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = filetypes.test(file.mimetype);
+        if (mimetype && items) {
+            return cb(null, true);
+        }
+        cb(new Error("Error: Images Only!"));
+    }
+});
+
+app.use('/uploads', express.static('uploads')); // Serve uploaded files
+
+// Auth Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.sendStatus(401);
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+// Helper for all query
+const dbAll = (query, params) => {
+    return new Promise((resolve, reject) => {
+        db.all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+};
+
+// GET USER PROFILE & DATA
+app.get('/api/me', authenticateToken, async (req, res) => {
+    try {
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, design_config, recovery_hash, created_at FROM users WHERE id = ?', [req.user.userId]);
+        if (!user) return res.sendStatus(404);
+
+        const { recovery_hash, ...safeUser } = user;
+
+        // Fetch Links & Wallets
+        const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [req.user.userId]);
+        const wallets = await dbAll('SELECT * FROM wallets WHERE user_id = ?', [req.user.userId]);
+
+        res.json({
+            ...safeUser,
+            hasRecovery: !!recovery_hash,
+            links,
+            wallets,
+            design: user.design_config ? JSON.parse(user.design_config) : null
+        });
+    } catch (err) {
+        console.error('API/ME Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+// SYNC DASHBOARD (Deploy Changes)
+app.post('/api/me/sync', authenticateToken, async (req, res) => {
+    try {
+        const { links, wallets, design } = req.body;
+        const userId = req.user.userId;
+
+        // 1. Update User Config
+        await dbRun('UPDATE users SET design_config = ? WHERE id = ?', [JSON.stringify(design), userId]);
+
+        // 2. Sync Links (Delete All & Re-insert) 
+        await dbRun('DELETE FROM links WHERE user_id = ?', [userId]);
+        if (links && Array.isArray(links)) {
+            for (const l of links) {
+                await dbRun('INSERT INTO links (user_id, type, title, url) VALUES (?, ?, ?, ?)', [userId, l.type, l.title, l.url]);
+            }
+        }
+
+        // 3. Sync Wallets
+        await dbRun('DELETE FROM wallets WHERE user_id = ?', [userId]);
+        if (wallets && Array.isArray(wallets)) {
+            for (const w of wallets) {
+                await dbRun('INSERT INTO wallets (user_id, currency, label, address) VALUES (?, ?, ?, ?)', [userId, w.currency, w.label, w.address]);
+            }
+        }
+
+        res.json({ message: 'Dashboard Deployed Successfully' });
+
+        // Invalidate Cache
+        const user = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
+        if (user) profileCache.del(`user:${user.username}`);
+
+    } catch (err) {
+        console.error('SYNC Error:', err);
+        res.status(500).json({ error: 'Sync failed' });
+    }
+});
+
+// PUBLIC PROFILE DATA
+app.get('/api/user/:username', async (req, res) => {
+    try {
+        const username = req.params.username;
+        const cacheKey = `user:${username}`;
+
+        // 1. Check Cache
+        const cachedData = profileCache.get(cacheKey);
+        if (cachedData) {
+            console.log(`[Cache] Serving ${username} from memory`);
+            return res.json(cachedData);
+        }
+
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, design_config, created_at FROM users WHERE username = ?', [username]);
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Fetch Links & Wallets
+        const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [user.id]);
+        const wallets = await dbAll('SELECT * FROM wallets WHERE user_id = ?', [user.id]);
+
+        const profileData = {
+            ...user,
+            links,
+            wallets,
+            design: user.design_config ? JSON.parse(user.design_config) : null
+        };
+
+        // 2. Set Cache
+        profileCache.set(cacheKey, profileData);
+
+        res.json(profileData);
+    } catch (err) {
+        console.error('API/USER Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+app.put('/api/me', authenticateToken, async (req, res) => {
+    try {
+        const { display_name, bio } = req.body;
+        await dbRun('UPDATE users SET display_name = ?, bio = ? WHERE id = ?', [display_name, bio, req.user.userId]);
+
+        // Invalidate Cache
+        profileCache.del(`user:${req.user.username}`);
+
+        res.json({ message: 'Profile updated' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+// UPLOAD IMAGE (Pre-optimized with Sharp)
+app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+        const type = req.params.type;
+        if (!['profile', 'banner', 'qr_logo'].includes(type)) return res.status(400).json({ error: 'Invalid upload type' });
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+        const originalPath = req.file.path;
+        const filename = `${req.file.filename.split('.')[0]}.webp`;
+        const optimizedPath = path.join(uploadDir, filename);
+
+        // Process with Sharp
+        let sharpInstance = sharp(originalPath);
+
+        if (type === 'banner') {
+            sharpInstance = sharpInstance.resize(1500, 500, { fit: 'cover', position: 'center' });
+        } else if (type === 'profile') {
+            sharpInstance = sharpInstance.resize(500, 500, { fit: 'cover', position: 'center' });
+        } else if (type === 'qr_logo') {
+            sharpInstance = sharpInstance.resize(200, 200, { fit: 'inside' });
+        }
+
+        await sharpInstance
+            .webp({ quality: 85 })
+            .toFile(optimizedPath);
+
+        // Delete original file
+        fs.unlink(originalPath, (err) => {
+            if (err) console.error('Failed to delete original upload:', err);
+        });
+
+        const fileUrl = `/uploads/${filename}`;
+
+        if (type !== 'qr_logo') {
+            const column = type === 'profile' ? 'profile_image' : 'banner_image';
+            await dbRun(`UPDATE users SET ${column} = ? WHERE id = ?`, [fileUrl, req.user.userId]);
+
+            // Invalidate cache when images change
+            const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+            if (user) profileCache.del(`user:${user.username}`);
+        }
+
+        res.json({ message: 'Upload pre-optimized and successful', url: fileUrl });
+    } catch (err) {
+        console.error('Upload Optimization Error:', err);
+        res.status(500).json({ error: 'Upload or optimization failed' });
+    }
+});
+
+// REGISTER
+app.post('/api/register', authLimiter, async (req, res) => {
+    try {
+        const { username, password, recovery_password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' });
+        }
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+
+        const existingUser = await dbGet('SELECT id FROM users WHERE username = ?', [username]);
+        if (existingUser) {
+            return res.status(409).json({ error: 'Username already taken' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+
+        // Hash recovery password if provided
+        let recoveryHash = null;
+        if (recovery_password) {
+            recoveryHash = await bcrypt.hash(recovery_password, salt);
+        }
+
+        const result = await dbRun(
+            'INSERT INTO users (username, password_hash, recovery_hash) VALUES (?, ?, ?)',
+            [username, hash, recoveryHash]
+        );
+        const userId = result.lastID;
+
+        const token = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.status(201).json({ message: 'Identity created successfully', token, username });
+
+    } catch (error) {
+        console.error('Register Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// LOGIN
+app.post('/api/login', authLimiter, async (req, res) => {
+    try {
+        console.log('Login Attempt Payload:', req.body);
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Missing credentials' });
+        }
+
+        const user = await dbGet('SELECT * FROM users WHERE username = ?', [username]);
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const validPassword = await bcrypt.compare(password, user.password_hash);
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.json({ message: 'Authenticated', token, username: user.username });
+
+    } catch (error) {
+        console.error('Login Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+// --- FIDO2 / WEBAUTHN ---
+
+// 1. Register: Generate Options
+app.get('/api/webauthn/register-options', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { attachment } = req.query; // 'platform' or 'cross-platform'
+
+        const user = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const authenticators = await dbAll('SELECT * FROM authenticators WHERE user_id = ?', [userId]);
+
+        const options = await generateRegistrationOptions({
+            rpName,
+            rpID,
+            userID: Buffer.from(user.id.toString()), // Uint8Array/Buffer required
+            userName: user.username,
+            userDisplayName: user.display_name || user.username,
+            // Don't re-register existing authenticators
+            // excludeCredentials expects Base64URL strings - filter out any null/undefined
+            excludeCredentials: authenticators
+                .filter(auth => auth.credential_id && typeof auth.credential_id === 'string')
+                .map(auth => ({
+                    id: auth.credential_id,
+                    transports: auth.transports ? JSON.parse(auth.transports) : undefined,
+                })),
+            authenticatorSelection: {
+                residentKey: 'preferred',
+                userVerification: 'preferred',
+                ...(attachment && (attachment === 'platform' || attachment === 'cross-platform') && { authenticatorAttachment: attachment })
+            },
+        });
+
+        // Save challenge
+        challengeStore.set(userId, options.challenge);
+
+        res.json({ options });
+    } catch (err) {
+        console.error('WebAuthn Reg Options Error:', err);
+        res.status(500).json({ error: 'Failed to generate registration options' });
+    }
+});
+
+// 2. Register: Verify
+app.post('/api/webauthn/register-verify', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { body, authenticatorAttachment } = req.body;
+        const expectedChallenge = challengeStore.get(userId);
+
+        if (!expectedChallenge) {
+            return res.status(400).json({ error: 'Challenge expired or not found' });
+        }
+
+        const verification = await verifyRegistrationResponse({
+            response: body,
+            expectedChallenge,
+            expectedOrigin: allowedOrigins,
+            expectedRPID: rpID,
+        });
+
+        if (verification.verified && verification.registrationInfo) {
+            const { credential } = verification.registrationInfo;
+
+            // --- CORRECCIÓN AQUÍ: Evitar doble codificación ---
+            // credential.id YA ES un string Base64URL en la librería moderna
+            const credIdStr = credential.id;
+
+            // PublicKey suele ser Uint8Array/Buffer, así que esto se mantiene
+            const credPkStr = Buffer.from(credential.publicKey).toString('base64url');
+
+            const counter = 0; // Inicializar contador
+
+            await dbRun(
+                'INSERT INTO authenticators (user_id, credential_id, credential_public_key, counter, transports, attachment) VALUES (?, ?, ?, ?, ?, ?)',
+                [userId, credIdStr, credPkStr, counter, JSON.stringify(body.response.transports || []), authenticatorAttachment || 'cross-platform']
+            );
+
+            challengeStore.delete(userId);
+            res.json({ verified: true });
+        } else {
+            res.status(400).json({ verified: false, error: 'Verification failed' });
+        }
+
+    } catch (err) {
+        console.error('WebAuthn Verify Error:', err);
+        res.status(500).json({ error: 'Failed to verify registration' });
+    }
+});
+
+// 3. Auth: Generate Options (Login)
+app.get('/api/webauthn/auth-options', async (req, res) => {
+    try {
+        const { username, type } = req.query; // Optional: if username provided, fetch their devices
+
+        let query = 'SELECT * FROM authenticators';
+        let params = [];
+
+        if (username) {
+            const user = await dbGet('SELECT id FROM users WHERE username = ?', [username]);
+            if (user) {
+                query = 'SELECT * FROM authenticators WHERE user_id = ?';
+                params = [user.id];
+
+                if (type && (type === 'platform' || type === 'cross-platform')) {
+                    query += ' AND attachment = ?';
+                    params.push(type);
+                }
+            } else {
+                // Return empty if user not found but username provided
+                query = 'SELECT * FROM authenticators WHERE 1=0';
+            }
+        }
+
+        const authenticators = await dbAll(query, params);
+
+        const options = await generateAuthenticationOptions({
+            rpID,
+            allowCredentials: authenticators
+                .filter(auth => auth.credential_id && typeof auth.credential_id === 'string')
+                .map(auth => ({
+                    id: auth.credential_id,
+                    transports: auth.transports ? JSON.parse(auth.transports) : undefined,
+                })),
+            userVerification: 'preferred',
+        });
+
+        const challengeKey = username ? `auth:${username}` : `auth:generic:${options.challenge}`;
+        challengeStore.set(challengeKey, options.challenge);
+
+        res.json({ options, challengeKey, username }); // Nest options to avoid library warnings
+
+    } catch (err) {
+        console.error('WebAuthn Auth Options Error:', err);
+        res.status(500).json({ error: 'Failed to generate auth options' });
+    }
+});
+
+// 4. Auth: Verify (Login) - ROBUST & DEBUGGED
+app.post('/api/webauthn/auth-verify', async (req, res) => {
+    try {
+        const { body, username, challengeKey } = req.body;
+
+        console.log('[DEBUG] Auth Verify Request:', { username, challengeKey, credentialId: body.id });
+
+        const expectedChallenge = challengeStore.get(challengeKey);
+        if (!expectedChallenge) {
+            console.error('[ERROR] Challenge expired or not found for key:', challengeKey);
+            return res.status(400).json({ error: 'Challenge expired' });
+        }
+
+        // Try to find user either by provided username OR by looking up the credential
+        let user;
+        if (username) {
+            user = await dbGet('SELECT * FROM users WHERE username = ?', [username]);
+        } else if (body.id) {
+            const auth = await dbGet('SELECT user_id FROM authenticators WHERE credential_id = ?', [body.id]);
+            if (auth) {
+                user = await dbGet('SELECT * FROM users WHERE id = ?', [auth.user_id]);
+            }
+        }
+
+        if (!user) {
+            console.error('[ERROR] User not found during auth');
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const authenticator = await dbGet('SELECT * FROM authenticators WHERE user_id = ? AND credential_id = ?', [user.id, body.id]);
+
+        if (!authenticator) {
+            console.error('[ERROR] Authenticator not found in DB. User:', user.id, 'CredID:', body.id);
+            return res.status(400).json({ error: 'Authenticator not registered' });
+        }
+
+        // --- DEFENSA CONTRA DATOS CORRUPTOS ---
+        // Aseguramos que el contador sea un número (SQLite puede devolver null)
+        const safeCounter = (authenticator.counter !== null && authenticator.counter !== undefined)
+            ? Number(authenticator.counter)
+            : 0;
+
+        // Validamos que existan las claves antes de crear el Buffer
+        if (!authenticator.credential_id || !authenticator.credential_public_key) {
+            throw new Error('Corrupted authenticator data in DB (missing ID or Public Key)');
+        }
+
+        // Objeto authenticator construido explícitamente para debug
+        const authenticatorObj = {
+            credentialID: Buffer.from(authenticator.credential_id, 'base64url'),
+            credentialPublicKey: Buffer.from(authenticator.credential_public_key, 'base64url'),
+            counter: safeCounter,
+        };
+
+        // console.log('[DEBUG] Verifying with authenticator object:', authenticatorObj);
+
+        const verification = await verifyAuthenticationResponse({
+            response: body,
+            expectedChallenge,
+            expectedOrigin: allowedOrigins, // Usa la lista definida arriba
+            expectedRPID: rpID,
+            authenticator: authenticatorObj,
+        });
+
+        if (verification.verified) {
+            // Update counter
+            await dbRun('UPDATE authenticators SET counter = ? WHERE id = ?', [verification.authenticationInfo.newCounter, authenticator.id]);
+
+            // Login successful
+            const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+            challengeStore.delete(challengeKey);
+
+            res.json({ verified: true, token, username: user.username });
+
+        } else {
+            console.error('[ERROR] Verification logic returned false');
+            res.status(400).json({ verified: false, error: 'Verification failed' });
+        }
+    } catch (err) {
+        console.error('WebAuthn Auth Verify Error:', err);
+        res.status(500).json({ error: `Internal Server Error: ${err.message}` });
+    }
+});
+
+// --- SECURITY & ACCOUNT OPS ---
+
+// Manage Authenticators (MOVED HERE BEFORE OTHER /api/me/* ROUTES)
+app.get('/api/me/authenticators', authenticateToken, async (req, res) => {
+    try {
+        const authenticators = await dbAll('SELECT id, created_at, transports, counter, attachment FROM authenticators WHERE user_id = ?', [req.user.userId]);
+        res.json(authenticators.map(a => ({
+            id: a.id,
+            created_at: a.created_at,
+            transports: a.transports ? JSON.parse(a.transports) : [],
+            attachment: a.attachment,
+            label: 'Hardware Authenticator'
+        })));
+    } catch (err) {
+        console.error('Get Authenticators Error:', err);
+        res.status(500).json({ error: 'Failed to fetch authenticators' });
+    }
+});
+
+app.delete('/api/me/authenticators/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        await dbRun('DELETE FROM authenticators WHERE id = ? AND user_id = ?', [id, req.user.userId]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Delete Authenticator Error:', err);
+        res.status(500).json({ error: 'Failed to delete authenticator' });
+    }
+});
+
+// 1. Change Passwords (from Dashboard)
+app.put('/api/me/security', authenticateToken, async (req, res) => {
+    try {
+        const { currentPassword, newPassword, newRecoveryPassword } = req.body;
+        const userId = req.user.userId;
+
+        // Verify current password
+        const user = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+        const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Incorrect current password' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        let updateQuery = 'UPDATE users SET ';
+        const params = [];
+
+        if (newPassword) {
+            const hash = await bcrypt.hash(newPassword, salt);
+            updateQuery += 'password_hash = ?, ';
+            params.push(hash);
+        }
+
+        if (newRecoveryPassword) {
+            const recoveryHash = await bcrypt.hash(newRecoveryPassword, salt);
+            updateQuery += 'recovery_hash = ?, ';
+            params.push(recoveryHash);
+        }
+
+        if (params.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+        updateQuery = updateQuery.slice(0, -2) + ' WHERE id = ?';
+        params.push(userId);
+
+        await dbRun(updateQuery, params);
+        res.json({ message: 'Security credentials updated' });
+
+    } catch (err) {
+        console.error('Security Update Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// 2. Recovery Access (from Login)
+app.post('/api/recover-access', async (req, res) => {
+    try {
+        const { username, recoveryPassword, newPassword } = req.body;
+        if (!username || !recoveryPassword || !newPassword) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const user = await dbGet('SELECT * FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        if (!user || !user.recovery_hash) {
+            return res.status(404).json({ error: 'Recovery not available for this identity' });
+        }
+
+        const validRecovery = await bcrypt.compare(recoveryPassword, user.recovery_hash);
+        if (!validRecovery) {
+            return res.status(401).json({ error: 'Invalid recovery password' });
+        }
+
+        // Reset primary password
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(newPassword, salt);
+        await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, user.id]);
+
+        res.json({ message: 'Access restored. You can now login with your new password.' });
+
+    } catch (err) {
+        console.error('Recovery Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// 3. Destroy Account (Total Wipe)
+app.delete('/api/me', authenticateToken, async (req, res) => {
+    try {
+        const { password, recoveryPassword } = req.body;
+        const userId = req.user.userId;
+
+        const user = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+
+        // Verify both passwords for total destruction as requested
+        const validPass = await bcrypt.compare(password, user.password_hash);
+        const validRecovery = user.recovery_hash ? await bcrypt.compare(recoveryPassword, user.recovery_hash) : true;
+
+        if (!validPass || !validRecovery) {
+            return res.status(401).json({ error: 'Verification failed. Both passwords required for destruction.' });
+        }
+
+        // Wipe everything
+        await dbRun('DELETE FROM links WHERE user_id = ?', [userId]);
+        await dbRun('DELETE FROM wallets WHERE user_id = ?', [userId]);
+        await dbRun('DELETE FROM users WHERE id = ?', [userId]);
+
+        // Invalidate cache
+        profileCache.del(`user:${user.username}`);
+
+        res.json({ message: 'Identity and all data successfully destroyed.' });
+
+    } catch (err) {
+        console.error('Account Destruction Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Catch-all 404 for API
+app.use('/api/*', (req, res) => {
+    console.log(`404 Hit on API: ${req.originalUrl}`);
+    res.status(404).json({ error: 'API route not found' });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`GOXMR Server running on port ${PORT} (0.0.0.0)`);
+});

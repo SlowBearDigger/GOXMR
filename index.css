@@ -1,0 +1,55 @@
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url('/fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Space Grotesk';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('/fonts/space-grotesk-500.woff2') format('woff2');
+}
+
+@import "tailwindcss";
+@config "./tailwind.config.js";
+
+
+@layer base {
+    body {
+        background-color: #ffffff;
+        color: #000000;
+        overflow-x: hidden;
+        font-family: 'Space Grotesk', sans-serif;
+    }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.card-texture {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+.theme-amber .card-texture,
+.theme-shadow .card-texture,
+.theme-neon .card-texture,
+.theme-void .card-texture {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Custom animations from index.html that might not be in tailwind config yet */
+.typewriter-text {
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+}

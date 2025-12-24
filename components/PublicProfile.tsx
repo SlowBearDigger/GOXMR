@@ -68,7 +68,7 @@ export const PublicProfile: React.FC = () => {
     useEffect(() => {
         if (isLoading || !profile) return;
 
-        const defaultWallet = wallets.find(w => w.currency === 'XMR') || wallets[0];
+        const defaultWallet = wallets.find(w => w.currency === 'XMR' && w.address) || wallets.find(w => w.address);
         const qrData = defaultWallet ? defaultWallet.address : `https://goxmr.click/${username}`;
 
         const qr = new QRCodeStyling({
@@ -202,7 +202,7 @@ export const PublicProfile: React.FC = () => {
             {isAmber && <div className="scanline-effect"></div>}
 
             <div className="relative z-10">
-                <div className="relative w-full aspect-[21/9] md:aspect-[3/1] min-h-[200px] max-h-[500px] overflow-hidden bg-black border-b-4 border-accent">
+                <div className="relative w-full aspect-[21/9] md:aspect-[3/1] min-h-[200px] h-[35vh] max-h-[600px] overflow-hidden bg-black border-b-4 border-accent">
                     {profile.banner_image ? (
                         <img src={profile.banner_image} alt="Banner" className="w-full h-full object-cover object-top" />
                     ) : (
@@ -286,11 +286,12 @@ export const PublicProfile: React.FC = () => {
                                                 {copied === wallet.address && <span className="text-green-600 bg-green-50 px-1">COPIED_</span>}
                                             </div>
                                             <button
-                                                onClick={() => handleCopy(wallet.address, wallet.address)}
-                                                className="w-full relative border-2 border-black bg-gray-50 p-3 text-left font-mono text-[10px] break-all hover:bg-black hover:text-white transition-all"
+                                                onClick={() => wallet.address && handleCopy(wallet.address, wallet.address)}
+                                                className={`w-full relative border-2 border-black bg-gray-50 p-3 text-left font-mono text-[10px] break-all transition-all ${wallet.address ? 'hover:bg-black hover:text-white' : 'opacity-50 cursor-not-allowed'}`}
                                                 style={{ borderColor: BC }}
+                                                disabled={!wallet.address}
                                             >
-                                                {wallet.address}
+                                                {wallet.address || "NO_ADDRESS_ATTACHED"}
                                             </button>
                                         </div>
                                     ))}

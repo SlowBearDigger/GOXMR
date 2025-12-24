@@ -96,6 +96,15 @@ export const Dashboard: React.FC = () => {
         setIsDeploying(true);
         setIsDeploySuccess(false);
         const token = localStorage.getItem('goxmr_token');
+        const emptyWallets = wallets.filter(w => !w.address);
+        if (emptyWallets.length > 0) {
+            const confirm = window.confirm(`Warning: ${emptyWallets.length} wallet(s) have no address. They will be invisible on your public profile. Proceed anyway?`);
+            if (!confirm) {
+                setIsDeploying(false);
+                return;
+            }
+        }
+
         const designData = {
             accentColor,
             backgroundColor,

@@ -296,7 +296,10 @@ export const Dashboard: React.FC = () => {
                                         <img src={bannerImage} alt="Banner" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full bg-gray-200 flex items-center justify-center font-mono text-gray-400 text-xs">
-                                            NO_BANNER_DETECTED
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span>NO_BANNER_DETECTED</span>
+                                                <span className="text-[10px] opacity-50 uppercase mt-2">Recommended: 1500x500px</span>
+                                            </div>
                                         </div>
                                     )}
                                     <button
@@ -319,8 +322,9 @@ export const Dashboard: React.FC = () => {
                                             {profileImage ? (
                                                 <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                                                    <Camera size={24} className="text-gray-400" />
+                                                <div className="flex flex-col items-center">
+                                                    <Camera size={24} className="text-gray-400 mb-1" />
+                                                    <span className="text-[8px] text-gray-400 font-mono uppercase">512x512</span>
                                                 </div>
                                             )}
                                         </div>
@@ -685,7 +689,7 @@ export const Dashboard: React.FC = () => {
                         />
                     </section>
                 </div>
-            </div>
+            </div >
         </div >
     );
 };

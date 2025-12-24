@@ -202,22 +202,14 @@ export const PublicProfile: React.FC = () => {
             {isAmber && <div className="scanline-effect"></div>}
 
             <div className="relative z-10">
-                <div className="relative w-full aspect-[21/9] md:aspect-[3/1] min-h-[250px] max-h-[450px] overflow-hidden bg-black border-b-4 border-accent">
+                <div className="relative w-full aspect-[21/9] md:aspect-[3/1] min-h-[200px] max-h-[400px] overflow-hidden bg-black border-b-4 border-accent">
                     {profile.banner_image ? (
-                        <img src={profile.banner_image} alt="Banner" className="w-full h-full object-cover opacity-80" />
+                        <img src={profile.banner_image} alt="Banner" className="w-full h-full object-cover" />
                     ) : (
                         <div className="absolute inset-0 opacity-40 mix-blend-screen"
                             style={{ backgroundImage: `repeating-linear-gradient(45deg, ${AC} 0px, ${AC} 1px, transparent 1px, transparent 10px)` }}>
                         </div>
                     )}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-pulse"></div>
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-                        <GlitchText
-                            text={(profile.display_name || username).toUpperCase()}
-                            as="h1"
-                            className="text-[6rem] md:text-[14rem] font-black text-white opacity-10 tracking-tighter leading-none"
-                        />
-                    </div>
                 </div>
 
                 <div className="container mx-auto px-4 max-w-2xl -mt-32 relative z-20 mb-24 animate-in slide-in-from-bottom-10 fade-in duration-700">

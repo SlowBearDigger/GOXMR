@@ -202,9 +202,9 @@ export const PublicProfile: React.FC = () => {
             {isAmber && <div className="scanline-effect"></div>}
 
             <div className="relative z-10">
-                <div className="relative w-full aspect-[21/9] md:aspect-[3/1] min-h-[200px] max-h-[400px] overflow-hidden bg-black border-b-4 border-accent">
+                <div className="relative w-full aspect-[21/9] md:aspect-[3/1] min-h-[200px] max-h-[500px] overflow-hidden bg-black border-b-4 border-accent">
                     {profile.banner_image ? (
-                        <img src={profile.banner_image} alt="Banner" className="w-full h-full object-cover" />
+                        <img src={profile.banner_image} alt="Banner" className="w-full h-full object-cover object-top" />
                     ) : (
                         <div className="absolute inset-0 opacity-40 mix-blend-screen"
                             style={{ backgroundImage: `repeating-linear-gradient(45deg, ${AC} 0px, ${AC} 1px, transparent 1px, transparent 10px)` }}>

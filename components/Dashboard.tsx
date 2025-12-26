@@ -472,7 +472,7 @@ export const Dashboard: React.FC = () => {
                                             </div>
                                             <div className="mt-3 flex items-center gap-2">
                                                 <div className="flex-1 h-[1px] bg-gray-200 dark:bg-zinc-700"></div>
-                                                <span className="text-[8px] font-mono text-gray-400 uppercase">Automated_Via_Namecheap_API</span>
+                                                <span className="text-[8px] font-mono text-gray-400 uppercase">Universal_Lookup_Active</span>
                                                 <div className="flex-1 h-[1px] bg-gray-200 dark:bg-zinc-700"></div>
                                             </div>
                                         </div>

@@ -64,11 +64,9 @@ const updateDNS = async (username, xmrAddress) => {
         const soaRecord = records.find(r => r.type === 'SOA' || r.record_type === 'SOA');
 
         if (!soaRecord) {
-            console.log('[DEBUG] Records (filtered keys):', records.map(r => ({ type: r.type, record_type: r.record_type, name: r.name })));
-            if (records.length > 0) {
-                console.log('[DEBUG] First record full sample:', JSON.stringify(records[0], null, 2));
-            }
-            throw new Error('Could not find SOA record in zone');
+            // DEBUG: Leak structure to UI if not found
+            const debugInfo = JSON.stringify(records.slice(0, 3), null, 2);
+            throw new Error(`Could not find SOA record in zone. Records sample: ${debugInfo}`);
         }
 
         // Try to get serial from 'serial' property first, then data array
@@ -80,8 +78,8 @@ const updateDNS = async (username, xmrAddress) => {
         }
 
         if (!serial) {
-            console.log('[DEBUG] SOA Record found but no serial:', JSON.stringify(soaRecord, null, 2));
-            throw new Error('Could not extract serial number from SOA record');
+            // DEBUG: Leak structure to UI if serial missing
+            throw new Error(`Could not extract serial number from SOA record. SOA Record dump: ${JSON.stringify(soaRecord, null, 2)}`);
         }
 
         // 2. Prepare atomic edits

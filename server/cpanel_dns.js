@@ -57,7 +57,7 @@ const callCpanel = async (module, func, params = {}) => {
  */
 const getZoneRecords = async () => {
     const config = getCpanelConfig();
-    return await callCpanel('DNS', 'parse_zone', { domain: config.domain });
+    return await callCpanel('DNS', 'parse_zone', { zone: config.domain });
 };
 
 /**

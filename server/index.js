@@ -36,6 +36,7 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
     process.exit(1);
 }
 const challengeStore = new Map();
+const pgpChallengeStore = new Map(); // Store for PGP challenges
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
@@ -161,9 +162,9 @@ db.serialize(() => {
             console.error('Migration Error (design_config):', err);
         }
     });
-    db.run('ALTER TABLE users ADD COLUMN recovery_hash TEXT', (err) => {
+    db.run('ALTER TABLE users ADD COLUMN pgp_public_key TEXT', (err) => {
         if (err && !err.message.includes('duplicate column name')) {
-            console.error('Migration Error (recovery_hash):', err);
+            console.error('Migration Error (pgp_public_key):', err);
         }
     });
 });
@@ -232,7 +233,7 @@ const dbAll = (query, params) => {
 };
 app.get('/api/me', authenticateToken, async (req, res) => {
     try {
-        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, design_config, recovery_hash, created_at FROM users WHERE id = ?', [req.user.userId]);
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, design_config, recovery_hash, pgp_public_key, created_at FROM users WHERE id = ?', [req.user.userId]);
         if (!user) return res.sendStatus(404);
         const { recovery_hash, ...safeUser } = user;
         const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [req.user.userId]);
@@ -242,7 +243,8 @@ app.get('/api/me', authenticateToken, async (req, res) => {
             hasRecovery: !!recovery_hash,
             links,
             wallets,
-            design: user.design_config ? JSON.parse(user.design_config) : null
+            design: user.design_config ? JSON.parse(user.design_config) : null,
+            hasPgp: !!user.pgp_public_key
         });
     } catch (err) {
         console.error('API/ME Error:', err);
@@ -265,7 +267,7 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
             for (const l of links) {
                 // Security: Limit string lengths
                 if (l.title?.length > 100 || l.url?.length > 500) continue;
-                await dbRun('INSERT INTO links (user_id, type, title, url) VALUES (?, ?, ?, ?)', [userId, l.type, l.title, l.url]);
+                await dbRun('INSERT INTO links (user_id, type, title, url, icon) VALUES (?, ?, ?, ?, ?)', [userId, l.type, l.title, l.url, l.icon]);
             }
         }
         await dbRun('DELETE FROM wallets WHERE user_id = ?', [userId]);
@@ -372,13 +374,78 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
         res.status(500).json({ error: 'Upload or optimization failed' });
     }
 });
+// PGP AUTH ENDPOINTS
+app.post('/api/pgp/challenge', async (req, res) => {
+    try {
+        const { username } = req.body;
+        if (!username) return res.status(400).json({ error: 'Username required' });
+
+        const user = await dbGet('SELECT pgp_public_key FROM users WHERE username = ?', [username]);
+        if (!user || !user.pgp_public_key) {
+            return res.status(404).json({ error: 'PGP not configured for this identity' });
+        }
+
+        const challenge = `GOXMR_AUTH_CHALLENGE_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        pgpChallengeStore.set(username, { challenge, timestamp: Date.now() });
+
+        // Challenges expire in 5 minutes
+        setTimeout(() => pgpChallengeStore.delete(username), 5 * 60 * 1000);
+
+        res.json({ challenge });
+    } catch (err) {
+        console.error('PGP Challenge Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+const openpgp = require('openpgp');
+
+app.post('/api/pgp/verify', async (req, res) => {
+    try {
+        const { username, signature } = req.body;
+        if (!username || !signature) return res.status(400).json({ error: 'Missing credentials' });
+
+        const stored = pgpChallengeStore.get(username);
+        if (!stored) return res.status(401).json({ error: 'Challenge expired or not found' });
+
+        const user = await dbGet('SELECT * FROM users WHERE username = ?', [username]);
+        if (!user || !user.pgp_public_key) return res.status(404).json({ error: 'Identity error' });
+
+        try {
+            const publicKey = await openpgp.readKey({ armoredKey: user.pgp_public_key });
+            const message = await openpgp.readCleartextMessage({ cleartextMessage: signature });
+            const verification = await openpgp.verify({
+                message,
+                verificationKeys: publicKey
+            });
+            const { verified, keyID } = verification.signatures[0];
+            await verified; // throws on invalid signature
+
+            // Verify content matches challenge
+            if (message.getText().trim() !== stored.challenge) {
+                return res.status(401).json({ error: 'Challenge mismatch' });
+            }
+
+            const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+            pgpChallengeStore.delete(username);
+            res.json({ message: 'Authenticated', token, username: user.username });
+        } catch (pgpErr) {
+            console.error('PGP Verification Logic Error:', pgpErr);
+            return res.status(401).json({ error: 'Invalid PGP Signature' });
+        }
+    } catch (err) {
+        console.error('PGP Verify Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
 app.post('/api/register', authLimiter, botHoneypot, async (req, res) => {
     try {
-        const { username, password, recovery_password } = req.body;
-        if (!username || !password) {
-            return res.status(400).json({ error: 'Username and password are required' });
+        const { username, password, recovery_password, pgp_public_key } = req.body;
+        if (!username || (!password && !pgp_public_key)) {
+            return res.status(400).json({ error: 'Username and (Password or PGP Key) are required' });
         }
-        if (password.length < 8) {
+        if (password && password.length < 8) {
             return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
         const existingUser = await dbGet('SELECT id FROM users WHERE username = ?', [username]);
@@ -386,14 +453,14 @@ app.post('/api/register', authLimiter, botHoneypot, async (req, res) => {
             return res.status(409).json({ error: 'Username already taken' });
         }
         const salt = await bcrypt.genSalt(10);
-        const hash = await bcrypt.hash(password, salt);
+        const hash = password ? await bcrypt.hash(password, salt) : 'PGP_ONLY_ACCOUNT_DISABLED_PASSWORD';
         let recoveryHash = null;
         if (recovery_password) {
             recoveryHash = await bcrypt.hash(recovery_password, salt);
         }
         const result = await dbRun(
-            'INSERT INTO users (username, password_hash, recovery_hash) VALUES (?, ?, ?)',
-            [username, hash, recoveryHash]
+            'INSERT INTO users (username, password_hash, recovery_hash, pgp_public_key) VALUES (?, ?, ?, ?)',
+            [username, hash, recoveryHash, pgp_public_key]
         );
         const userId = result.lastID;
         const token = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '7d' });
@@ -665,6 +732,17 @@ app.put('/api/me/security', authenticateToken, async (req, res) => {
         res.json({ message: 'Security credentials updated' });
     } catch (err) {
         console.error('Security Update Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.put('/api/me/pgp', authenticateToken, async (req, res) => {
+    try {
+        const { pgp_public_key } = req.body;
+        await dbRun('UPDATE users SET pgp_public_key = ? WHERE id = ?', [pgp_public_key, req.user.userId]);
+        res.json({ message: 'PGP Public Key updated' });
+    } catch (err) {
+        console.error('PGP Update Error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });

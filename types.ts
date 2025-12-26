@@ -22,6 +22,7 @@ export interface Link {
     type: string;
     title: string;
     url: string;
+    icon?: string;
 }
 
 export interface Wallet {

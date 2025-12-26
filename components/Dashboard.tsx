@@ -1,11 +1,60 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2 } from 'lucide-react';
+import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown } from 'lucide-react';
 import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
 import { DashboardNav } from './DashboardNav';
 import type { Link, Wallet } from '../types.ts';
 const INITIAL_LINKS: Link[] = [];
 const INITIAL_WALLETS: Wallet[] = [];
+
+const AVAILABLE_ICONS = [
+    { name: 'Twitter', icon: Twitter, id: 'twitter' },
+    { name: 'Github', icon: Github, id: 'github' },
+    { name: 'Globe', icon: Globe, id: 'globe' },
+    { name: 'Youtube', icon: Youtube, id: 'youtube' },
+    { name: 'Instagram', icon: Instagram, id: 'instagram' },
+    { name: 'Twitch', icon: Twitch, id: 'twitch' },
+    { name: 'Discord', icon: MessageSquare, id: 'discord' },
+    { name: 'Telegram', icon: Send, id: 'telegram' },
+    { name: 'Mail', icon: Mail, id: 'mail' },
+    { name: 'Link', icon: LinkIcon, id: 'link' },
+    { name: 'Zap', icon: Zap, id: 'zap' },
+    { name: 'Shield', icon: Shield, id: 'shield' },
+    { name: 'Cpu', icon: Cpu, id: 'cpu' },
+];
+
+const IconPicker = ({ currentIcon, onSelect }: { currentIcon: string, onSelect: (id: string) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const SelectedIcon = AVAILABLE_ICONS.find(i => i.id === currentIcon)?.icon || Globe;
+
+    return (
+        <div className="relative">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-8 h-8 bg-white dark:bg-zinc-700 border border-black dark:border-white flex items-center justify-center text-monero-orange hover:bg-gray-50 dark:hover:bg-zinc-600 transition-colors"
+            >
+                <SelectedIcon size={14} />
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-10 left-0 z-50 bg-white dark:bg-zinc-900 border-2 border-black dark:border-white p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] grid grid-cols-4 gap-2 w-48 animate-in fade-in zoom-in duration-200">
+                    {AVAILABLE_ICONS.map(({ id, icon: Icon }) => (
+                        <button
+                            key={id}
+                            onClick={() => {
+                                onSelect(id);
+                                setIsOpen(false);
+                            }}
+                            className={`p-2 border border-transparent hover:border-black dark:hover:border-white hover:bg-gray-50 dark:hover:bg-zinc-800 transition-all ${currentIcon === id ? 'bg-monero-orange/10 border-monero-orange' : ''}`}
+                        >
+                            <Icon size={14} className={currentIcon === id ? 'text-monero-orange' : 'dark:text-white'} />
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 export const Dashboard: React.FC = () => {
     const [links, setLinks] = useState<Link[]>(INITIAL_LINKS);
     const [wallets, setWallets] = useState<Wallet[]>(INITIAL_WALLETS);
@@ -39,6 +88,8 @@ export const Dashboard: React.FC = () => {
     const [backgroundColor, setBackgroundColor] = useState('');
     const [pageColor, setPageColor] = useState('');
     const [borderColor, setBorderColor] = useState('');
+    const [textColor, setTextColor] = useState('');
+    const [buttonColor, setButtonColor] = useState('');
     const [activeProtocol, setActiveProtocol] = useState('DEFAULT');
     const [username, setUsername] = useState('Loading...');
     const [displayName, setDisplayName] = useState('');
@@ -46,6 +97,8 @@ export const Dashboard: React.FC = () => {
     const [profileImage, setProfileImage] = useState<string | null>(null);
     const [bannerImage, setBannerImage] = useState<string | null>(null);
     const [hasRecovery, setHasRecovery] = useState(true);
+    const [hasPgp, setHasPgp] = useState(false);
+    const [pgpKey, setPgpKey] = useState('');
     const fileInputRefProfile = React.useRef<HTMLInputElement>(null);
     const fileInputRefBanner = React.useRef<HTMLInputElement>(null);
     const [qrDesign, setQrDesign] = useState({
@@ -75,11 +128,15 @@ export const Dashboard: React.FC = () => {
                 if (data.links) setLinks(data.links);
                 if (data.wallets) setWallets(data.wallets);
                 setHasRecovery(!!data.hasRecovery);
+                setHasPgp(!!data.hasPgp);
+                if (data.pgp_public_key) setPgpKey(data.pgp_public_key);
                 if (data.design) {
                     if (data.design.accentColor) setAccentColor(data.design.accentColor);
                     if (data.design.backgroundColor) setBackgroundColor(data.design.backgroundColor);
                     if (data.design.pageColor) setPageColor(data.design.pageColor);
                     if (data.design.borderColor) setBorderColor(data.design.borderColor);
+                    if (data.design.textColor) setTextColor(data.design.textColor);
+                    if (data.design.buttonColor) setButtonColor(data.design.buttonColor);
                     if (data.design.tags) setDesignTags(data.design.tags);
                     if (data.design.activeProtocol) setActiveProtocol(data.design.activeProtocol);
                     if (data.design.qrDesign) setQrDesign({ ...qrDesign, ...data.design.qrDesign });
@@ -110,6 +167,8 @@ export const Dashboard: React.FC = () => {
             backgroundColor,
             pageColor,
             borderColor,
+            textColor,
+            buttonColor,
             tags: designTags,
             activeProtocol,
             qrDesign
@@ -189,6 +248,8 @@ export const Dashboard: React.FC = () => {
             if (parsed.backgroundColor) setBackgroundColor(parsed.backgroundColor);
             if (parsed.pageColor) setPageColor(parsed.pageColor);
             if (parsed.borderColor) setBorderColor(parsed.borderColor);
+            if (parsed.textColor) setTextColor(parsed.textColor);
+            if (parsed.buttonColor) setButtonColor(parsed.buttonColor);
             if (parsed.tags) setDesignTags(parsed.tags);
             if (parsed.activeProtocol) setActiveProtocol(parsed.activeProtocol);
         }
@@ -203,6 +264,8 @@ export const Dashboard: React.FC = () => {
         if (key === 'backgroundColor') setBackgroundColor(value);
         if (key === 'pageColor') setPageColor(value);
         if (key === 'borderColor') setBorderColor(value);
+        if (key === 'textColor') setTextColor(value);
+        if (key === 'buttonColor') setButtonColor(value);
         if (key === 'tags') setDesignTags(value);
         if (key === 'activeProtocol') setActiveProtocol(value);
     };
@@ -242,16 +305,16 @@ export const Dashboard: React.FC = () => {
     return (
         <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in zoom-in duration-500">
             { }
-            <div className="flex justify-between items-end mb-8 border-b-2 border-black pb-4 ml-0 lg:ml-[25%]">
+            <div className="flex justify-between items-end mb-8 border-b-2 border-black dark:border-zinc-800 pb-4 ml-0 lg:ml-[25%] transition-colors">
                 <div>
-                    <h1 className="text-4xl font-black font-mono tracking-tighter uppercase mb-2">Command Center</h1>
-                    <p className="font-mono text-sm text-gray-500">Manage your sovereign identity.</p>
+                    <h1 className="text-4xl font-black font-mono tracking-tighter uppercase mb-2 dark:text-white">Command Center</h1>
+                    <p className="font-mono text-sm text-gray-500 dark:text-gray-400">Manage your sovereign identity.</p>
                 </div>
                 <div className="flex gap-4 items-center">
                     <button
                         onClick={handleDeploy}
                         disabled={isDeploying}
-                        className={`font-mono text-xs px-4 py-2 border-2 border-black font-bold uppercase transition-all flex items-center gap-2 ${isDeploySuccess ? 'bg-green-500 text-white' : 'bg-black text-white hover:bg-white hover:text-black'
+                        className={`font-mono text-xs px-4 py-2 border-2 border-black dark:border-white font-bold uppercase transition-all flex items-center gap-2 ${isDeploySuccess ? 'bg-green-500 text-white' : 'bg-black text-white dark:bg-white dark:text-black hover:bg-monero-orange dark:hover:bg-monero-orange hover:text-white'
                             }`}
                     >
                         {isDeploying ? (
@@ -271,7 +334,7 @@ export const Dashboard: React.FC = () => {
                             </>
                         )}
                     </button>
-                    <div className="font-mono text-xs bg-green-100 text-green-800 px-2 py-1 border border-green-800 font-bold">
+                    <div className="font-mono text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 px-2 py-1 border border-green-800 dark:border-green-600 font-bold">
                         ● SYSTEMS ONLINE
                     </div>
                 </div>
@@ -287,24 +350,24 @@ export const Dashboard: React.FC = () => {
                     />
                 </div>
                 { }
-                <div className="lg:w-3/4 flex flex-col gap-12">
+                <div className="lg:w-3/4 flex flex-col gap-12 transition-colors duration-300">
                     { }
                     <section id="identity" className="scroll-mt-32">
-                        <div className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                            <div className="bg-black text-white p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Identity Module</span>
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             </div>
-                            { }
+
                             <input type="file" ref={fileInputRefBanner} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'banner')} />
                             <input type="file" ref={fileInputRefProfile} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'profile')} />
 
                             <div className="relative group">
-                                <div className="h-48 bg-gray-100 overflow-hidden relative">
+                                <div className="h-48 bg-gray-100 dark:bg-zinc-800 overflow-hidden relative">
                                     {bannerImage ? (
                                         <img src={bannerImage} alt="Banner" className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full bg-gray-200 flex items-center justify-center font-mono text-gray-400 text-xs">
+                                        <div className="w-full h-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center font-mono text-gray-400 text-xs">
                                             <div className="flex flex-col items-center gap-1">
                                                 <span>NO_BANNER_DETECTED</span>
                                                 <span className="text-[10px] opacity-50 uppercase mt-2">Recommended: 1500x500px</span>
@@ -316,7 +379,6 @@ export const Dashboard: React.FC = () => {
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            console.log("[DEBUG] Banner upload triggered via click");
                                             fileInputRefBanner.current?.click();
                                         }}
                                         className="absolute bottom-4 right-4 bg-monero-orange text-white p-2 hover:bg-black transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] z-30"
@@ -325,13 +387,14 @@ export const Dashboard: React.FC = () => {
                                         <Camera size={16} />
                                     </button>
                                 </div>
+
                                 <div className="p-6 pt-0 -mt-12 relative flex flex-col md:flex-row gap-6 items-end">
                                     <div className="relative group/profile">
-                                        <div className="w-24 h-24 rounded-full border-4 border-white bg-gray-100 overflow-hidden shadow-lg relative">
+                                        <div className="w-24 h-24 rounded-full border-4 border-white dark:border-zinc-900 bg-gray-100 dark:bg-zinc-800 overflow-hidden shadow-lg relative">
                                             {profileImage ? (
                                                 <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                                             ) : (
-                                                <div className="flex flex-col items-center">
+                                                <div className="flex flex-col items-center justify-center h-full">
                                                     <Camera size={24} className="text-gray-400 mb-1" />
                                                     <span className="text-[8px] text-gray-400 font-mono uppercase">512x512</span>
                                                 </div>
@@ -348,33 +411,34 @@ export const Dashboard: React.FC = () => {
                                         <div className="flex flex-col gap-1">
                                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sovereign Identity</label>
                                             <div className="flex items-center gap-2">
-                                                <span className="font-mono font-bold text-lg">@{username}</span>
-                                                <div className="px-1 bg-green-100 text-green-700 text-[8px] font-mono border border-green-200">VERIFIED</div>
+                                                <span className="font-mono font-bold text-lg dark:text-white">@{username}</span>
+                                                <div className="px-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] font-mono border border-green-200 dark:border-green-800">VERIFIED</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-100">
+
+                                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-100 dark:border-zinc-800">
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="block text-xs font-bold uppercase text-gray-500 mb-2 font-mono">Display Name</label>
+                                            <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2 font-mono">Display Name</label>
                                             <input
                                                 type="text"
                                                 value={displayName}
                                                 onChange={(e) => setDisplayName(e.target.value)}
                                                 onBlur={handleBlur}
                                                 placeholder="Enter display name..."
-                                                className="w-full border-2 border-black p-3 font-mono text-sm focus:bg-gray-50 outline-none transition-colors"
+                                                className="w-full bg-white dark:bg-zinc-800 border-2 border-black dark:border-white p-3 font-mono text-sm focus:bg-gray-50 dark:focus:bg-zinc-700 outline-none transition-colors dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold uppercase text-gray-500 mb-2 font-mono">Sovereign Bio</label>
+                                            <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2 font-mono">Sovereign Bio</label>
                                             <textarea
                                                 value={bio}
                                                 onChange={(e) => setBio(e.target.value)}
                                                 onBlur={handleBlur}
                                                 placeholder="Tell your story..."
-                                                className="w-full border-2 border-black p-3 font-mono text-sm h-32 focus:bg-gray-50 outline-none transition-colors resize-none"
+                                                className="w-full bg-white dark:bg-zinc-800 border-2 border-black dark:border-white p-3 font-mono text-sm h-32 focus:bg-gray-50 dark:focus:bg-zinc-700 outline-none transition-colors resize-none dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
                                             />
                                         </div>
                                     </div>
@@ -384,29 +448,30 @@ export const Dashboard: React.FC = () => {
                     </section>
 
                     <section id="signals" className="scroll-mt-32 w-full">
-                        <div className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] h-full flex flex-col">
-                            <div className="bg-black text-white p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Signals (Links)</span>
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             </div>
                             <div className="p-4 flex-1 flex flex-col gap-3 overflow-y-auto max-h-[600px]">
                                 {links.map(link => (
-                                    <div key={link.id} className="border border-black p-2 flex items-center gap-2 bg-gray-50 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
-                                        <div className="w-8 h-8 bg-white border border-black flex items-center justify-center text-monero-orange">
-                                            {link.type === 'twitter' ? <Twitter size={14} /> : link.type === 'github' ? <Github size={14} /> : <Globe size={14} />}
-                                        </div>
+                                    <div key={link.id} className="border border-black dark:border-white p-2 flex items-center gap-2 bg-gray-50 dark:bg-zinc-800 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all">
+                                        <IconPicker
+                                            currentIcon={link.icon || link.type || 'globe'}
+                                            onSelect={(icon) => updateLink(link.id, { icon })}
+                                        />
                                         <div className="flex-1 min-w-0">
                                             <input
                                                 type="text"
                                                 value={link.title}
                                                 onChange={(e) => updateLink(link.id, { title: e.target.value })}
-                                                className="w-full font-mono text-xs font-bold bg-transparent outline-none"
+                                                className="w-full font-mono text-xs font-bold bg-transparent outline-none dark:text-white"
                                             />
                                             <input
                                                 type="text"
                                                 value={link.url}
                                                 onChange={(e) => updateLink(link.id, { url: e.target.value })}
-                                                className="w-full font-mono text-[10px] text-gray-500 bg-transparent outline-none"
+                                                className="w-full font-mono text-[10px] text-gray-500 dark:text-gray-400 bg-transparent outline-none"
                                             />
                                         </div>
                                         <button onClick={() => removeLink(link.id)} className="text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -414,7 +479,7 @@ export const Dashboard: React.FC = () => {
                                         </button>
                                     </div>
                                 ))}
-                                <button onClick={addLink} className="w-full border-2 border-dashed border-gray-300 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
+                                <button onClick={addLink} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
                                     <Plus size={14} /> ADD SIGNAL
                                 </button>
                             </div>
@@ -422,25 +487,25 @@ export const Dashboard: React.FC = () => {
                     </section>
 
                     <section id="treasury" className="scroll-mt-32 w-full">
-                        <div className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] h-full flex flex-col">
-                            <div className="bg-black text-white p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Treasury (Wallets)</span>
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             </div>
                             <div className="p-4 flex-1 flex flex-col gap-3">
                                 {wallets.map(wallet => (
-                                    <div key={wallet.id} className="border border-black p-3 bg-gray-50 flex flex-col gap-2 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
+                                    <div key={wallet.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex flex-col gap-2 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all">
                                         <div className="flex justify-between items-center">
                                             <div className="flex items-center gap-2">
                                                 {wallet.currency === 'XMR' ?
-                                                    <div className="w-5 h-5 bg-monero-orange rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black">M</div> :
-                                                    <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black">B</div>
+                                                    <div className="w-5 h-5 bg-monero-orange rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">M</div> :
+                                                    <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">B</div>
                                                 }
                                                 <input
                                                     type="text"
                                                     value={wallet.label}
                                                     onChange={(e) => updateWallet(wallet.id, { label: e.target.value })}
-                                                    className="font-mono text-xs font-bold bg-transparent outline-none"
+                                                    className="font-mono text-xs font-bold bg-transparent outline-none dark:text-white"
                                                 />
                                             </div>
                                             <button onClick={() => removeWallet(wallet.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -456,12 +521,12 @@ export const Dashboard: React.FC = () => {
                                                 value={wallet.address}
                                                 onChange={(e) => updateWallet(wallet.id, { address: e.target.value })}
                                                 placeholder="Paste Address"
-                                                className="w-full pl-6 pr-2 py-1 font-mono text-[10px] bg-white border border-gray-200 focus:border-black outline-none"
+                                                className="w-full pl-6 pr-2 py-1 font-mono text-[10px] bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 focus:border-black dark:focus:border-white outline-none dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                                             />
                                         </div>
                                     </div>
                                 ))}
-                                <button onClick={addWallet} className="w-full border-2 border-dashed border-gray-300 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
+                                <button onClick={addWallet} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
                                     <Plus size={14} /> ADD WALLET
                                 </button>
                             </div>
@@ -478,8 +543,8 @@ export const Dashboard: React.FC = () => {
                     </section>
                     { }
                     <section id="design" className="scroll-mt-32">
-                        <div className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                            <div className="bg-black text-white p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Design Studio</span>
                                 <div className="flex gap-2 items-center">
                                     <span className="text-[10px] opacity-50">VIRTUAL_RENDERER v2.0</span>
@@ -492,7 +557,7 @@ export const Dashboard: React.FC = () => {
                                     <div className="space-y-8">
                                         { }
                                         <div>
-                                            <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-4 border-b border-gray-100 pb-1">Visual Protocol (Skins)</h4>
+                                            <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-4 border-b border-gray-100 dark:border-zinc-800 pb-1">Visual Protocol (Skins)</h4>
                                             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                                                 {[
                                                     { id: 'DEFAULT', name: 'Standard_Ops', color: '#F26822' },
@@ -508,8 +573,8 @@ export const Dashboard: React.FC = () => {
                                                             updateDesign('accentColor', skin.color);
                                                         }}
                                                         className={`flex flex-col gap-1 p-2 border-2 transition-all group ${activeProtocol === skin.id
-                                                            ? 'border-black bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                                                            : 'border-gray-200 text-gray-400 hover:border-black hover:text-black'}`}
+                                                            ? 'border-black dark:border-white bg-black dark:bg-white text-white dark:text-black shadow-[2px_2px_0px_0px_rgba(242,104,34,1)]'
+                                                            : 'border-gray-200 dark:border-zinc-700 text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white dark:bg-zinc-800'}`}
                                                     >
                                                         <div className="flex justify-between items-center w-full">
                                                             <span className="font-mono text-[8px] font-bold">[{activeProtocol === skin.id ? 'ACTIVE' : 'READY'}]</span>
@@ -531,13 +596,13 @@ export const Dashboard: React.FC = () => {
                                                     type="color"
                                                     value={accentColor}
                                                     onChange={(e) => updateDesign('accentColor', e.target.value)}
-                                                    className="w-10 h-10 border-2 border-black cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                    className="w-10 h-10 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
                                                 />
                                                 <input
                                                     type="text"
                                                     value={accentColor.toUpperCase()}
                                                     onChange={(e) => updateDesign('accentColor', e.target.value)}
-                                                    className="font-mono text-xs border-2 border-black p-2 w-full outline-none focus:bg-gray-50 uppercase"
+                                                    className="font-mono text-xs border-2 border-black dark:border-white p-2 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
                                                 />
                                             </div>
                                         </div>
@@ -549,7 +614,7 @@ export const Dashboard: React.FC = () => {
                                                     type="color"
                                                     value={borderColor || '#000000'}
                                                     onChange={(e) => updateDesign('borderColor', e.target.value)}
-                                                    className="w-10 h-10 border-2 border-black cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                    className="w-10 h-10 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
                                                 />
                                                 <div className="flex gap-1 flex-1">
                                                     <input
@@ -557,10 +622,36 @@ export const Dashboard: React.FC = () => {
                                                         value={borderColor ? borderColor.toUpperCase() : ''}
                                                         placeholder="DEFAULT"
                                                         onChange={(e) => updateDesign('borderColor', e.target.value)}
-                                                        className="font-mono text-xs border-2 border-black p-2 w-full outline-none focus:bg-gray-50 uppercase"
+                                                        className="font-mono text-xs border-2 border-black dark:border-white p-2 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
                                                     />
                                                     {borderColor && (
-                                                        <button onClick={() => updateDesign('borderColor', '')} className="border-2 border-black px-2 hover:bg-black hover:text-white transition-colors">
+                                                        <button onClick={() => updateDesign('borderColor', '')} className="border-2 border-black dark:border-white px-2 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors">
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Color: Text */}
+                                        <div>
+                                            <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-2">Text Color</h4>
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="color"
+                                                    value={textColor || '#000000'}
+                                                    onChange={(e) => updateDesign('textColor', e.target.value)}
+                                                    className="w-10 h-10 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                />
+                                                <div className="flex gap-1 flex-1">
+                                                    <input
+                                                        type="text"
+                                                        value={textColor ? textColor.toUpperCase() : ''}
+                                                        placeholder="DEFAULT"
+                                                        onChange={(e) => updateDesign('textColor', e.target.value)}
+                                                        className="font-mono text-xs border-2 border-black dark:border-white p-2 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
+                                                    />
+                                                    {textColor && (
+                                                        <button onClick={() => updateDesign('textColor', '')} className="border-2 border-black dark:border-white px-2 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors">
                                                             <Trash2 size={12} />
                                                         </button>
                                                     )}
@@ -575,7 +666,7 @@ export const Dashboard: React.FC = () => {
                                                     type="color"
                                                     value={pageColor || '#000000'}
                                                     onChange={(e) => updateDesign('pageColor', e.target.value)}
-                                                    className="w-10 h-10 border-2 border-black cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                    className="w-10 h-10 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
                                                 />
                                                 <div className="flex gap-1 flex-1">
                                                     <input
@@ -583,10 +674,10 @@ export const Dashboard: React.FC = () => {
                                                         value={pageColor ? pageColor.toUpperCase() : ''}
                                                         placeholder="THEME_DEFAULT"
                                                         onChange={(e) => updateDesign('pageColor', e.target.value)}
-                                                        className="font-mono text-xs border-2 border-black p-2 w-full outline-none focus:bg-gray-50 uppercase"
+                                                        className="font-mono text-xs border-2 border-black dark:border-white p-2 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
                                                     />
                                                     {pageColor && (
-                                                        <button onClick={() => updateDesign('pageColor', '')} className="border-2 border-black px-2 hover:bg-black hover:text-white transition-colors">
+                                                        <button onClick={() => updateDesign('pageColor', '')} className="border-2 border-black dark:border-white px-2 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors">
                                                             <Trash2 size={12} />
                                                         </button>
                                                     )}
@@ -601,7 +692,7 @@ export const Dashboard: React.FC = () => {
                                                     type="color"
                                                     value={backgroundColor || '#000000'}
                                                     onChange={(e) => updateDesign('backgroundColor', e.target.value)}
-                                                    className="w-10 h-10 border-2 border-black cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                    className="w-10 h-10 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
                                                 />
                                                 <div className="flex gap-1 flex-1">
                                                     <input
@@ -609,10 +700,36 @@ export const Dashboard: React.FC = () => {
                                                         value={backgroundColor ? backgroundColor.toUpperCase() : ''}
                                                         placeholder="DEFAULT"
                                                         onChange={(e) => updateDesign('backgroundColor', e.target.value)}
-                                                        className="font-mono text-xs border-2 border-black p-2 w-full outline-none focus:bg-gray-50 uppercase"
+                                                        className="font-mono text-xs border-2 border-black dark:border-white p-2 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
                                                     />
                                                     {backgroundColor && (
-                                                        <button onClick={() => updateDesign('backgroundColor', '')} className="border-2 border-black px-2 hover:bg-black hover:text-white transition-colors">
+                                                        <button onClick={() => updateDesign('backgroundColor', '')} className="border-2 border-black dark:border-white px-2 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors">
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Color: Buttons */}
+                                        <div>
+                                            <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-2">Button/Link Color</h4>
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="color"
+                                                    value={buttonColor || '#000000'}
+                                                    onChange={(e) => updateDesign('buttonColor', e.target.value)}
+                                                    className="w-10 h-10 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                />
+                                                <div className="flex gap-1 flex-1">
+                                                    <input
+                                                        type="text"
+                                                        value={buttonColor ? buttonColor.toUpperCase() : ''}
+                                                        placeholder="MATCHES_ACCENT"
+                                                        onChange={(e) => updateDesign('buttonColor', e.target.value)}
+                                                        className="font-mono text-xs border-2 border-black dark:border-white p-2 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
+                                                    />
+                                                    {buttonColor && (
+                                                        <button onClick={() => updateDesign('buttonColor', '')} className="border-2 border-black dark:border-white px-2 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors">
                                                             <Trash2 size={12} />
                                                         </button>
                                                     )}
@@ -622,22 +739,22 @@ export const Dashboard: React.FC = () => {
                                     </div>
                                     { }
                                     <div>
-                                        <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-4 border-b border-gray-100 pb-1">Identity Tags</h4>
+                                        <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-4 border-b border-gray-100 dark:border-zinc-800 pb-1">Identity Tags</h4>
                                         <div className="flex flex-wrap gap-2 mb-4">
                                             {designTags.map((tag, idx) => (
-                                                <div key={idx} className="flex items-center gap-1 bg-gray-100 border border-black px-2 py-1 group/tag">
+                                                <div key={idx} className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-800 border border-black dark:border-white px-2 py-1 group/tag">
                                                     <input
                                                         type="text"
                                                         value={tag}
                                                         onChange={(e) => editTag(idx, e.target.value)}
-                                                        className="bg-transparent font-mono text-[10px] uppercase font-bold outline-none w-20"
+                                                        className="bg-transparent font-mono text-[10px] uppercase font-bold outline-none w-20 dark:text-white"
                                                     />
                                                     <button onClick={() => removeTag(idx)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover/tag:opacity-100 transition-opacity">
                                                         <Trash2 size={10} />
                                                     </button>
                                                 </div>
                                             ))}
-                                            <button onClick={addTag} className="border border-dashed border-gray-400 px-2 py-1 text-[10px] font-mono hover:border-black transition-colors">
+                                            <button onClick={addTag} className="border border-dashed border-gray-400 dark:border-zinc-600 px-2 py-1 text-[10px] font-mono hover:border-black dark:hover:border-white transition-colors dark:text-gray-400 dark:hover:text-white">
                                                 + ADD_TAG
                                             </button>
                                         </div>
@@ -668,15 +785,20 @@ export const Dashboard: React.FC = () => {
                                                     <img src={profileImage || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"} alt="Profile" className="w-full h-full object-cover" />
                                                 </div>
                                             </div>
-                                            <div className="font-mono font-black uppercase text-sm mb-1" style={{ color: borderColor || '#000000' }}>@{username.replace('@', '')}</div>
+                                            <div className="font-mono font-black uppercase text-sm mb-1" style={{ color: textColor || borderColor || '#000000' }}>@{username.replace('@', '')}</div>
                                             <div className="flex flex-wrap justify-center gap-1 mb-3">
                                                 {designTags.slice(0, 3).map((t, i) => (
-                                                    <span key={i} className="text-[8px] px-1 py-0.5 text-white font-mono uppercase" style={{ backgroundColor: i === 0 ? accentColor : (borderColor || '#000') }}>{t}</span>
+                                                    <span key={i} className="text-[8px] px-1 py-0.5 text-white font-mono uppercase" style={{ backgroundColor: i === 0 ? accentColor : (borderColor || '#000'), color: i === 0 ? '#fff' : (textColor || '#fff') }}>{t}</span>
                                                 ))}
                                             </div>
                                             <div className="w-full h-1 bg-gray-100 mb-3" style={{ backgroundColor: `${accentColor}20` }}></div>
                                             <div className="w-full flex gap-1">
-                                                <div className="flex-1 h-6 border border-black bg-gray-50 flex items-center justify-center font-mono text-[8px] uppercase group-hover/prev:bg-black group-hover/prev:text-white transition-colors" style={{ borderColor: borderColor || '#000000' }}>Join Signals</div>
+                                                <div className="flex-1 h-6 border border-black bg-gray-50 flex items-center justify-center font-mono text-[8px] uppercase group-hover/prev:bg-black group-hover/prev:text-white transition-colors"
+                                                    style={{
+                                                        borderColor: borderColor || '#000000',
+                                                        backgroundColor: buttonColor || 'transparent',
+                                                        color: buttonColor ? (textColor || '#fff') : 'inherit'
+                                                    }}>Join Signals</div>
                                             </div>
                                         </div>
                                     </div>
@@ -695,6 +817,8 @@ export const Dashboard: React.FC = () => {
                             onRestore={handleRestore}
                             username={username}
                             hasRecovery={hasRecovery}
+                            hasPgp={hasPgp}
+                            pgpKey={pgpKey}
                         />
                     </section>
                 </div>

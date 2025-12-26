@@ -421,36 +421,59 @@ export const Dashboard: React.FC = () => {
                                                 <label className="text-[8px] font-black uppercase text-monero-orange">Wallet_Lookup_Handle</label>
                                                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
                                             </div>
-                                            <div className="flex items-center justify-between gap-2 overflow-hidden">
-                                                <div className="text-[10px] sm:text-xs truncate dark:text-white">
-                                                    <span className="text-gray-400">@</span>{username}<span className="text-gray-400">@{(() => {
-                                                        const parts = window.location.hostname.split('.');
-                                                        return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                    })()}</span>
+                                            <div className="flex flex-col gap-3 overflow-hidden">
+                                                <div className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[7px] font-black text-gray-400 uppercase">Social_Handle</span>
+                                                        <div className="text-[10px] sm:text-xs truncate dark:text-white font-bold">
+                                                            <span className="text-monero-orange">@</span>{username}<span className="text-gray-400">@{(() => {
+                                                                const parts = window.location.hostname.split('.');
+                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                            })()}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const rootDomain = (() => {
+                                                                const parts = window.location.hostname.split('.');
+                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                            })();
+                                                            navigator.clipboard.writeText(`@${username}@${rootDomain}`);
+                                                        }}
+                                                        className="text-[8px] font-black bg-monero-orange text-white px-2 py-1 hover:bg-black transition-colors"
+                                                    >
+                                                        COPY
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={() => {
-                                                        const rootDomain = (() => {
-                                                            const parts = window.location.hostname.split('.');
-                                                            return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                        })();
-                                                        navigator.clipboard.writeText(`@${username}@${rootDomain}`);
-                                                    }}
-                                                    className="text-[8px] font-bold border border-black dark:border-white px-1.5 py-0.5 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors"
-                                                >
-                                                    COPY_HANDLE
-                                                </button>
+
+                                                <div className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[7px] font-black text-gray-400 uppercase">Subdomain_Handle</span>
+                                                        <div className="text-[10px] sm:text-xs truncate dark:text-white font-bold">
+                                                            {username}<span className="text-gray-400">.{(() => {
+                                                                const parts = window.location.hostname.split('.');
+                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                            })()}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const rootDomain = (() => {
+                                                                const parts = window.location.hostname.split('.');
+                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                            })();
+                                                            navigator.clipboard.writeText(`${username}.${rootDomain}`);
+                                                        }}
+                                                        className="text-[8px] font-black bg-monero-orange text-white px-2 py-1 hover:bg-black transition-colors"
+                                                    >
+                                                        COPY
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-zinc-700">
-                                                <label className="text-[8px] font-black uppercase text-gray-400 mb-1 block">Advanced: Subdomain OpenAlias</label>
-                                                <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-2 leading-tight">To use <span className="text-white bg-black px-0.5">{username}.{(() => {
-                                                    const parts = window.location.hostname.split('.');
-                                                    return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                })()}</span> in wallets, add this TXT record to your DNS:</p>
-                                                <div className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-600 p-2 text-[8px] break-all select-all dark:text-white mb-2">
-                                                    oa1:xmr recipient_address={wallets.find(w => w.currency === 'XMR')?.address || '[XMR_ADDRESS_REQUIRED]'}; recipient_name={username};
-                                                </div>
-                                                <p className="text-[8px] text-gray-400 italic">You must also create an A/CNAME record for the subdomain.</p>
+                                            <div className="mt-3 flex items-center gap-2">
+                                                <div className="flex-1 h-[1px] bg-gray-200 dark:bg-zinc-700"></div>
+                                                <span className="text-[8px] font-mono text-gray-400 uppercase">Automated_Via_Namecheap_API</span>
+                                                <div className="flex-1 h-[1px] bg-gray-200 dark:bg-zinc-700"></div>
                                             </div>
                                         </div>
                                     </div>

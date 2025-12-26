@@ -74,12 +74,20 @@ const updateDNS = async (username, xmrAddress) => {
         if (!serial) {
             if (soaRecord.data && Array.isArray(soaRecord.data) && soaRecord.data.length >= 3) {
                 serial = soaRecord.data[2];
+            } else if (soaRecord.data_b64 && Array.isArray(soaRecord.data_b64) && soaRecord.data_b64.length >= 3) {
+                // Decode Base64 serial (e.g., MjAyNTEyMjMwNQ== -> 2025122305)
+                const b64Serial = soaRecord.data_b64[2];
+                try {
+                    serial = Buffer.from(b64Serial, 'base64').toString('utf-8');
+                } catch (e) {
+                    console.error('[CPANEL] Failed to decode serial:', e);
+                }
             }
         }
 
         if (!serial) {
-            // DEBUG: Leak structure to UI if serial missing
-            throw new Error(`Could not extract serial number from SOA record. SOA Record dump: ${JSON.stringify(soaRecord, null, 2)}`);
+            console.error('[CPANEL] SOA Record Dump:', JSON.stringify(soaRecord, null, 2));
+            throw new Error(`Could not extract serial number from SOA record.`);
         }
 
         // 2. Prepare atomic edits

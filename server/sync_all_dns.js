@@ -5,7 +5,6 @@ const xml2js = require('xml2js');
 require('dotenv').config();
 
 const dbPath = path.join(__dirname, 'database.db');
-const db = new sqlite3.Database(dbPath);
 
 const NC_CONFIG = {
     apiKey: process.env.NAMECHEAP_API_KEY,
@@ -62,8 +61,12 @@ const syncAll = async () => {
         logBuffer.push(msg);
     };
 
+    // Initialize DB connection for this run
+    const db = new sqlite3.Database(dbPath);
+
     if (!NC_CONFIG.apiKey || !NC_CONFIG.apiUser) {
         log('❌ ERROR: Namecheap API credentials missing in .env');
+        db.close(); // Ensure close if early return
         return { success: false, logs: logBuffer };
     }
 
@@ -150,6 +153,13 @@ const syncAll = async () => {
         log('📤 Uploading updated host records to Namecheap...');
         const response = await axios.post(NC_ENDPOINT, null, { params });
         const result = await parseXml(response.data);
+
+        // DEBUG: Force error with structure if things look wrong
+        if (!result.ApiResponse || !result.ApiResponse.$.Status) {
+            const debugInfo = JSON.stringify(result, null, 2);
+            log(`❌ Namecheap API Response Invalid: ${debugInfo}`);
+            return { success: false, logs: logBuffer, error: 'Invalid Structure' };
+        }
 
         if (result.ApiResponse.$.Status === 'OK') {
             log('✅ SUCCESS: All DNS records synchronized successfully.');

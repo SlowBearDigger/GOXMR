@@ -53,12 +53,18 @@ const getHosts = async () => {
     }
 };
 
-const runBatchSync = async () => {
+// function to allow calling from API
+const syncAll = async () => {
     console.log('🚀 Starting Batch DNS Synchronization...');
+    let logBuffer = [];
+    const log = (msg) => {
+        console.log(msg);
+        logBuffer.push(msg);
+    };
 
     if (!NC_CONFIG.apiKey || !NC_CONFIG.apiUser) {
-        console.error('❌ ERROR: Namecheap API credentials missing in .env');
-        process.exit(1);
+        log('❌ ERROR: Namecheap API credentials missing in .env');
+        return { success: false, logs: logBuffer };
     }
 
     try {
@@ -75,11 +81,17 @@ const runBatchSync = async () => {
             });
         });
 
-        console.log(`📊 Found ${users.length} users with Monero addresses.`);
+        log(`📊 Found ${users.length} users with Monero addresses.`);
 
         // 2. Fetch current DNS records
-        console.log('📥 Fetching current DNS records from Namecheap...');
-        const currentHosts = await getHosts();
+        log('📥 Fetching current DNS records from Namecheap...');
+        let currentHosts;
+        try {
+            currentHosts = await getHosts();
+        } catch (e) {
+            log(`❌ Failed to fetch hosts: ${e.message}`);
+            return { success: false, logs: logBuffer };
+        }
 
         // 3. Prepare new host list
         // We keep all "static" records (A, MX, CNAME, etc. that aren't user subdomains)
@@ -112,7 +124,7 @@ const runBatchSync = async () => {
         });
 
         const finalHosts = Array.from(hostMap.values());
-        console.log(`📝 Prepared ${finalHosts.length} host records.`);
+        log(`📝 Prepared ${finalHosts.length} host records.`);
 
         // 4. Update Namecheap
         const [sld, tld] = NC_CONFIG.domain.split('.');
@@ -135,21 +147,29 @@ const runBatchSync = async () => {
             params[`TTL${n}`] = host.TTL || '1799';
         });
 
-        console.log('📤 Uploading updated host records to Namecheap...');
+        log('📤 Uploading updated host records to Namecheap...');
         const response = await axios.post(NC_ENDPOINT, null, { params });
         const result = await parseXml(response.data);
 
         if (result.ApiResponse.$.Status === 'OK') {
-            console.log('✅ SUCCESS: All DNS records synchronized successfully.');
+            log('✅ SUCCESS: All DNS records synchronized successfully.');
+            return { success: true, logs: logBuffer };
         } else {
-            console.error('❌ ERROR:', JSON.stringify(result.ApiResponse.Errors));
+            const errorMsg = JSON.stringify(result.ApiResponse.Errors);
+            log(`❌ ERROR: ${errorMsg}`);
+            return { success: false, logs: logBuffer, error: errorMsg };
         }
 
     } catch (err) {
-        console.error('❌ BATCH SYNC FAILED:', err);
+        log(`❌ BATCH SYNC FAILED: ${err.message}`);
+        return { success: false, logs: logBuffer, error: err.message };
     } finally {
         db.close();
     }
 };
 
-runBatchSync();
+if (require.main === module) {
+    syncAll();
+}
+
+module.exports = { syncAll };

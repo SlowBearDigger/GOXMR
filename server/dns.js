@@ -24,6 +24,7 @@ const parseXml = (xml) => {
 const getHosts = async () => {
     const [sld, tld] = NC_CONFIG.domain.split('.');
     try {
+        console.log(`[DNS] Fetching hosts for ${NC_CONFIG.domain}...`);
         const response = await axios.get(NC_ENDPOINT, {
             params: {
                 ApiUser: NC_CONFIG.apiUser,
@@ -37,6 +38,17 @@ const getHosts = async () => {
         });
 
         const data = await parseXml(response.data);
+
+        if (data.ApiResponse.Errors && data.ApiResponse.Errors[0] && data.ApiResponse.Errors[0].Error) {
+            console.error('[DNS] API Error Response:', JSON.stringify(data.ApiResponse.Errors[0].Error));
+            throw new Error(`Namecheap API Error: ${data.ApiResponse.Errors[0].Error[0]._}`);
+        }
+
+        if (!data.ApiResponse.CommandResponse || !data.ApiResponse.CommandResponse[0]) {
+            console.error('[DNS] Unexpected Response Structure:', JSON.stringify(data));
+            throw new Error('Unexpected Namecheap API response format');
+        }
+
         const hosts = data.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0].host;
 
         return hosts.map(h => ({
@@ -47,7 +59,9 @@ const getHosts = async () => {
             TTL: h.$.TTL
         }));
     } catch (err) {
-        console.error('[DNS] Error fetching hosts:', err);
+        console.error('[DNS] Error fetching hosts details:', err.message);
+        // Do not throw, return empty to prevent creating a loop of retries if API is down
+        // throwing would convert to 500 in the endpoint
         throw err;
     }
 };

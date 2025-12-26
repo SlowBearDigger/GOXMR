@@ -415,6 +415,44 @@ export const Dashboard: React.FC = () => {
                                                 <div className="px-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] font-mono border border-green-200 dark:border-green-800">VERIFIED</div>
                                             </div>
                                         </div>
+
+                                        <div className="bg-gray-50 dark:bg-zinc-800/50 p-3 border border-gray-200 dark:border-zinc-700 font-mono">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-[8px] font-black uppercase text-monero-orange">Wallet_Lookup_Handle</label>
+                                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                                <div className="text-[10px] sm:text-xs truncate dark:text-white">
+                                                    <span className="text-gray-400">@</span>{username}<span className="text-gray-400">@{(() => {
+                                                        const parts = window.location.hostname.split('.');
+                                                        return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                    })()}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        const rootDomain = (() => {
+                                                            const parts = window.location.hostname.split('.');
+                                                            return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                        })();
+                                                        navigator.clipboard.writeText(`@${username}@${rootDomain}`);
+                                                    }}
+                                                    className="text-[8px] font-bold border border-black dark:border-white px-1.5 py-0.5 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors"
+                                                >
+                                                    COPY_HANDLE
+                                                </button>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-zinc-700">
+                                                <label className="text-[8px] font-black uppercase text-gray-400 mb-1 block">Advanced: Subdomain OpenAlias</label>
+                                                <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-2 leading-tight">To use <span className="text-white bg-black px-0.5">{username}.{(() => {
+                                                    const parts = window.location.hostname.split('.');
+                                                    return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                })()}</span> in wallets, add this TXT record to your DNS:</p>
+                                                <div className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-600 p-2 text-[8px] break-all select-all dark:text-white mb-2">
+                                                    oa1:xmr recipient_address={wallets.find(w => w.currency === 'XMR')?.address || '[XMR_ADDRESS_REQUIRED]'}; recipient_name={username};
+                                                </div>
+                                                <p className="text-[8px] text-gray-400 italic">You must also create an A/CNAME record for the subdomain.</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

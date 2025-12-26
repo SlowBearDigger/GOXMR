@@ -12,6 +12,20 @@ const App: React.FC = () => {
     const [isLoggedIn, setUserLoggedIn] = useState(false);
     const [username, setUsername] = useState<string | null>(null);
 
+    // Subdomain routing logic (e.g., user.goxmr.click -> goxmr.click/user/user)
+    useEffect(() => {
+        const hostname = window.location.hostname;
+        const parts = hostname.split('.');
+        // Check if there's a subdomain and it's not localhost/127.0.0.1 or 'www'
+        if (parts.length > 2 && !hostname.includes('localhost') && !hostname.includes('127.0.0.1') && parts[0] !== 'www') {
+            const subdomain = parts[0];
+            // If the current path is NOT already the profile path, redirect
+            if (!window.location.pathname.startsWith(`/user/${subdomain}`)) {
+                window.location.replace(`${window.location.protocol}//${parts.slice(1).join('.')}/user/${subdomain}`);
+            }
+        }
+    }, []);
+
     const [isLoginOpen, setIsLoginOpen] = useState(false);
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
     const [initialRegisterUsername, setInitialRegisterUsername] = useState('');

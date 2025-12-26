@@ -26,23 +26,29 @@ const callCpanel = async (module, func, params = {}) => {
     const url = `${config.baseUrl}/execute/${module}/${func}`;
 
     try {
+        console.log(`[CPANEL] Calling ${module}::${func}...`);
         const response = await axios.get(url, {
             params: params,
             headers: {
                 'Authorization': `cpanel ${config.username}:${config.apiToken}`
-            }
+            },
+            timeout: 10000 // 10s timeout
         });
 
         if (response.data.errors && response.data.errors.length > 0) {
-            throw new Error(`cPanel Error: ${response.data.errors.join(', ')}`);
+            const errBase = response.data.errors.join(', ');
+            console.error(`[CPANEL] API logical error: ${errBase}`);
+            throw new Error(`cPanel Error: ${errBase}`);
         }
 
         return response.data.data;
     } catch (err) {
-        if (err.response && err.response.data && err.response.data.errors) {
-            throw new Error(`cPanel API Error: ${err.response.data.errors.join(', ')}`);
+        let errorDetail = err.message;
+        if (err.response && err.response.data) {
+            errorDetail = JSON.stringify(err.response.data);
         }
-        throw err;
+        console.error(`[CPANEL] Fetch Failed: ${url}`, errorDetail);
+        throw new Error(`cPanel Request Failed: ${errorDetail}`);
     }
 };
 

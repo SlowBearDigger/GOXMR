@@ -18,6 +18,7 @@ console.log('MONERO_VIEW_KEY exists:', !!process.env.MONERO_VIEW_KEY);
 console.log('--- END ENV DEBUG ---');
 const sharp = require('sharp');
 const dnsUtil = require('./dns');
+const dnsSync = require('./sync_all_dns');
 const {
     generateRegistrationOptions,
     verifyRegistrationResponse,
@@ -892,6 +893,21 @@ app.get('*', (req, res) => {
         res.status(404).send('Frontend build not found. Run npm run build.');
     }
 });
+// ADMIN: Temporary Batch DNS Sync Trigger
+app.get('/api/admin/sync-dns', async (req, res) => {
+    const adminKey = req.query.key;
+    if (adminKey !== 'goxmr-sovereign-admin') {
+        return res.status(403).send('Forbidden: Invalid Key');
+    }
+
+    try {
+        const result = await dnsSync.syncAll();
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`GOXMR Server running on port ${PORT} (0.0.0.0)`);
 });

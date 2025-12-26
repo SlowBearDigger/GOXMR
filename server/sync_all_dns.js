@@ -1,8 +1,10 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const axios = require('axios');
-const xml2js = require('xml2js');
 require('dotenv').config();
+
+// Import shared robust DNS logic
+const { getHosts, parseXml } = require('./dns');
 
 const dbPath = path.join(__dirname, 'database.db');
 
@@ -12,44 +14,6 @@ const NC_CONFIG = {
     userName: process.env.NAMECHEAP_USERNAME,
     clientIp: process.env.NAMECHEAP_CLIENT_IP,
     domain: 'goxmr.click'
-};
-
-const NC_ENDPOINT = 'https://api.namecheap.com/xml.response';
-
-const parseXml = (xml) => {
-    return new Promise((resolve, reject) => {
-        xml2js.parseString(xml, (err, result) => {
-            if (err) reject(err);
-            else resolve(result);
-        });
-    });
-};
-
-const getHosts = async () => {
-    const [sld, tld] = NC_CONFIG.domain.split('.');
-    try {
-        const response = await axios.get(NC_ENDPOINT, {
-            params: {
-                ApiUser: NC_CONFIG.apiUser,
-                ApiKey: NC_CONFIG.apiKey,
-                UserName: NC_CONFIG.userName,
-                ClientIp: NC_CONFIG.clientIp,
-                Command: 'namecheap.domains.dns.getHosts',
-                SLD: sld,
-                TLD: tld
-            }
-        });
-        const data = await parseXml(response.data);
-        return data.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0].host.map(h => ({
-            Name: h.$.Name,
-            Type: h.$.Type,
-            Address: h.$.Address,
-            MXPref: h.$.MXPref,
-            TTL: h.$.TTL
-        }));
-    } catch (err) {
-        throw err;
-    }
 };
 
 // function to allow calling from API
@@ -66,7 +30,7 @@ const syncAll = async () => {
 
     if (!NC_CONFIG.apiKey || !NC_CONFIG.apiUser) {
         log('❌ ERROR: Namecheap API credentials missing in .env');
-        db.close(); // Ensure close if early return
+        db.close();
         return { success: false, logs: logBuffer };
     }
 
@@ -86,20 +50,17 @@ const syncAll = async () => {
 
         log(`📊 Found ${users.length} users with Monero addresses.`);
 
-        // 2. Fetch current DNS records
+        // 2. Fetch current DNS records using robust shared function
         log('📥 Fetching current DNS records from Namecheap...');
         let currentHosts;
         try {
             currentHosts = await getHosts();
         } catch (e) {
             log(`❌ Failed to fetch hosts: ${e.message}`);
-            return { success: false, logs: logBuffer };
+            return { success: false, logs: logBuffer, error: e.message };
         }
 
         // 3. Prepare new host list
-        // We keep all "static" records (A, MX, CNAME, etc. that aren't user subdomains)
-        // AND we'll add/update all user records.
-
         let hostMap = new Map();
         currentHosts.forEach(h => hostMap.set(`${h.Name}:${h.Type}`, h));
 
@@ -107,7 +68,6 @@ const syncAll = async () => {
             const username = user.username.toLowerCase();
             const address = user.address.trim();
 
-            // Add/Overwrite TXT for OpenAlias
             hostMap.set(`${username}:TXT`, {
                 Name: username,
                 Type: 'TXT',
@@ -116,7 +76,6 @@ const syncAll = async () => {
                 TTL: '1799'
             });
 
-            // Add/Overwrite A for Subdomain
             hostMap.set(`${username}:A`, {
                 Name: username,
                 Type: 'A',
@@ -151,7 +110,7 @@ const syncAll = async () => {
         });
 
         log('📤 Uploading updated host records to Namecheap...');
-        const response = await axios.post(NC_ENDPOINT, null, { params });
+        const response = await axios.post('https://api.namecheap.com/xml.response', null, { params });
         const result = await parseXml(response.data);
 
         // DEBUG: Force error with structure if things look wrong

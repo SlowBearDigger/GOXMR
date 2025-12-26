@@ -150,4 +150,4 @@ const updateOpenAlias = async (username, xmrAddress) => {
     }
 };
 
-module.exports = { updateOpenAlias };
+module.exports = { updateOpenAlias, getHosts, parseXml };

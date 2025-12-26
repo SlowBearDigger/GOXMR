@@ -39,14 +39,26 @@ const getHosts = async () => {
 
         const data = await parseXml(response.data);
 
+        // DEBUG: Force error with structure if things look wrong
+        if (!data.ApiResponse || !data.ApiResponse.CommandResponse) {
+            const debugInfo = JSON.stringify(data, null, 2);
+            console.error('[DNS] Invalid Response:', debugInfo);
+            throw new Error(`Invalid API Response Structure. Received: ${debugInfo}`);
+        }
+
         if (data.ApiResponse.Errors && data.ApiResponse.Errors[0] && data.ApiResponse.Errors[0].Error) {
             console.error('[DNS] API Error Response:', JSON.stringify(data.ApiResponse.Errors[0].Error));
             throw new Error(`Namecheap API Error: ${data.ApiResponse.Errors[0].Error[0]._}`);
         }
 
-        if (!data.ApiResponse.CommandResponse || !data.ApiResponse.CommandResponse[0]) {
-            console.error('[DNS] Unexpected Response Structure:', JSON.stringify(data));
-            throw new Error('Unexpected Namecheap API response format');
+        if (!data.ApiResponse.CommandResponse ||
+            !data.ApiResponse.CommandResponse[0] ||
+            !data.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult ||
+            !data.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0]) {
+
+            const debugInfo = JSON.stringify(data, null, 2);
+            console.error('[DNS] Unexpected Response Structure:', debugInfo);
+            throw new Error(`Unexpected Response Structure (No Hosts Result). Received: ${debugInfo}`);
         }
 
         const hosts = data.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0].host;
@@ -62,7 +74,8 @@ const getHosts = async () => {
         console.error('[DNS] Error fetching hosts details:', err.message);
         // Do not throw, return empty to prevent creating a loop of retries if API is down
         // throwing would convert to 500 in the endpoint
-        throw err;
+        // Ensure the full debug info bubbles up to the sync log
+        throw new Error(`DNS Fetch Failed: ${err.message}`);
     }
 };
 

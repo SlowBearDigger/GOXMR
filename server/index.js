@@ -312,6 +312,67 @@ app.get('/api/user/:username', async (req, res) => {
         res.status(500).json({ error: 'Server Error' });
     }
 });
+
+// Mastodon-compatible Bridge for Cake Wallet / OpenAlias Handle support (@user@domain)
+app.get('/.well-known/webfinger', async (req, res) => {
+    const resource = req.query.resource;
+    if (!resource || !resource.startsWith('acct:')) {
+        return res.status(400).json({ error: 'Missing or invalid resource' });
+    }
+
+    const acct = resource.replace('acct:', '');
+    const parts = acct.split('@');
+    const username = parts[0];
+
+    try {
+        const user = await dbGet('SELECT username FROM users WHERE username = ?', [username.toLowerCase()]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        res.json({
+            subject: `acct:${user.username}@${req.get('host')}`,
+            links: [
+                {
+                    rel: 'self',
+                    type: 'application/activity+json',
+                    href: `https://${req.get('host')}/api/v1/accounts/${user.username}`
+                }
+            ]
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.get('/api/v1/accounts/:username', async (req, res) => {
+    const username = req.params.username.toLowerCase();
+    try {
+        const user = await dbGet('SELECT id, username, display_name, bio FROM users WHERE username = ?', [username]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const wallets = await dbAll('SELECT currency, address FROM wallets WHERE user_id = ? AND currency = "XMR"', [user.id]);
+
+        let xmrNote = '';
+        if (wallets && wallets.length > 0) {
+            xmrNote = `\nMonero: ${wallets[0].address}`;
+        }
+
+        res.json({
+            id: user.id.toString(),
+            username: user.username,
+            acct: user.username,
+            display_name: user.display_name || user.username,
+            note: `${user.bio || ''}${xmrNote}`.trim(),
+            url: `https://${req.get('host')}/user/${user.username}`,
+            header: '',
+            avatar: '',
+            emojis: [],
+            fields: []
+        });
+    } catch (err) {
+        console.error('[MASTODON_BRIDGE] Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 app.put('/api/me', authenticateToken, async (req, res) => {
     try {
         const { display_name, bio } = req.body;

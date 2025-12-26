@@ -875,6 +875,25 @@ app.get('/api/dev-fund-status', (req, res) => {
     res.json(moneroMonitor.getStatus());
 });
 
+app.get('/api/version', (req, res) => {
+    res.json({ version: '1.11', timestamp: new Date().toISOString() });
+});
+
+// ADMIN: Temporary Batch DNS Sync Trigger
+app.get('/api/admin/sync-dns', async (req, res) => {
+    const adminKey = req.query.key;
+    if (adminKey !== 'goxmr-sovereign-admin') {
+        return res.status(403).send('Forbidden: Invalid Key');
+    }
+
+    try {
+        const result = await dnsSync.syncAll();
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Production: Serve static files from the 'dist' directory
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
@@ -891,20 +910,6 @@ app.get('*', (req, res) => {
         res.sendFile(indexPath);
     } else {
         res.status(404).send('Frontend build not found. Run npm run build.');
-    }
-});
-// ADMIN: Temporary Batch DNS Sync Trigger
-app.get('/api/admin/sync-dns', async (req, res) => {
-    const adminKey = req.query.key;
-    if (adminKey !== 'goxmr-sovereign-admin') {
-        return res.status(403).send('Forbidden: Invalid Key');
-    }
-
-    try {
-        const result = await dnsSync.syncAll();
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
     }
 });
 

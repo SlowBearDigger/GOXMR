@@ -26,6 +26,7 @@ cp $SERVER_DIR/index.js $DEPLOY_DIR/
 cp $SERVER_DIR/db.js $DEPLOY_DIR/
 cp $SERVER_DIR/monero_monitor.js $DEPLOY_DIR/
 cp $SERVER_DIR/dns.js $DEPLOY_DIR/
+cp $SERVER_DIR/sync_all_dns.js $DEPLOY_DIR/
 
 # Create a clean .env file (DO NOT COPY LOCAL SECRETS)
 echo "🔒 Creating template .env..."

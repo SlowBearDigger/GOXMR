@@ -274,9 +274,11 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
         await dbRun('DELETE FROM wallets WHERE user_id = ?', [userId]);
         if (wallets && Array.isArray(wallets)) {
             for (const w of wallets) {
-                // Security: Limit address/label length
-                if (w.label?.length > 100 || w.address?.length > 200) continue;
-                await dbRun('INSERT INTO wallets (user_id, currency, label, address) VALUES (?, ?, ?, ?)', [userId, w.currency, w.label, w.address]);
+                // Security: Limit address/label length + TRIM whitespace
+                const cleanAddress = w.address?.trim();
+                const cleanLabel = w.label?.trim();
+                if (cleanLabel?.length > 100 || cleanAddress?.length > 200) continue;
+                await dbRun('INSERT INTO wallets (user_id, currency, label, address) VALUES (?, ?, ?, ?)', [userId, w.currency, cleanLabel, cleanAddress]);
             }
         }
 
@@ -284,7 +286,7 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
         const xmrWallet = wallets?.find(w => w.currency === 'XMR');
         if (xmrWallet && xmrWallet.address) {
             // Run DNS update in background to not block the response
-            dnsUtil.updateOpenAlias(req.user.username, xmrWallet.address).catch(err => {
+            dnsUtil.updateOpenAlias(req.user.username, xmrWallet.address.trim()).catch(err => {
                 console.error('[DNS_AUTO] Failed background update:', err);
             });
         }
@@ -338,13 +340,15 @@ app.get('/.well-known/webfinger', async (req, res) => {
         const user = await dbGet('SELECT username FROM users WHERE username = ?', [username.toLowerCase()]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        const rootDomain = req.get('host').replace(/^www\./, '');
+
         res.json({
-            subject: `acct:${user.username}@${req.get('host')}`,
+            subject: `acct:${user.username}@${rootDomain}`,
             links: [
                 {
                     rel: 'self',
                     type: 'application/activity+json',
-                    href: `https://${req.get('host')}/api/v1/accounts/${user.username}`
+                    href: `https://${rootDomain}/api/v1/accounts/${user.username}`
                 }
             ]
         });
@@ -363,8 +367,11 @@ app.get('/api/v1/accounts/:username', async (req, res) => {
 
         let xmrNote = '';
         if (wallets && wallets.length > 0) {
-            xmrNote = `\nMonero: ${wallets[0].address}`;
+            // Standard format for most wallets: "XMR: address" or "Monero: address"
+            xmrNote = `\nXMR: ${wallets[0].address.trim()}`;
         }
+
+        const rootDomain = req.get('host').replace(/^www\./, '');
 
         res.json({
             id: user.id.toString(),
@@ -372,7 +379,7 @@ app.get('/api/v1/accounts/:username', async (req, res) => {
             acct: user.username,
             display_name: user.display_name || user.username,
             note: `${user.bio || ''}${xmrNote}`.trim(),
-            url: `https://${req.get('host')}/user/${user.username}`,
+            url: `https://${rootDomain}/user/${user.username}`,
             header: '',
             avatar: '',
             emojis: [],

@@ -68,10 +68,11 @@ const updateOpenAlias = async (username, xmrAddress) => {
         );
 
         // Add the OpenAlias TXT record
+        const cleanAddress = xmrAddress.trim();
         newHosts.push({
             Name: username,
             Type: 'TXT',
-            Address: `oa1:xmr recipient_address=${xmrAddress}; recipient_name=${username}; tx_description=GoXMR_Sovereign_Identity;`,
+            Address: `oa1:xmr recipient_address=${cleanAddress}; recipient_name=${username}; tx_description=GoXMR_Sovereign_Identity;`,
             MXPref: '10',
             TTL: '1799'
         });

@@ -17,7 +17,7 @@ console.log('MONERO_WALLET_ADDRESS exists:', !!process.env.MONERO_WALLET_ADDRESS
 console.log('MONERO_VIEW_KEY exists:', !!process.env.MONERO_VIEW_KEY);
 console.log('--- END ENV DEBUG ---');
 const sharp = require('sharp');
-const dnsUtil = require('./dns');
+const dnsUtil = require('./cpanel_dns');
 const dnsSync = require('./sync_all_dns');
 const {
     generateRegistrationOptions,
@@ -287,7 +287,7 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
         const xmrWallet = wallets?.find(w => w.currency === 'XMR');
         if (xmrWallet && xmrWallet.address) {
             // Run DNS update in background to not block the response
-            dnsUtil.updateOpenAlias(req.user.username, xmrWallet.address.trim()).catch(err => {
+            dnsUtil.updateDNS(req.user.username, xmrWallet.address.trim()).catch(err => {
                 console.error('[DNS_AUTO] Failed background update:', err);
             });
         }
@@ -876,10 +876,10 @@ app.get('/api/dev-fund-status', (req, res) => {
 });
 
 app.get('/api/version', (req, res) => {
-    res.json({ version: '1.14', timestamp: new Date().toISOString() });
+    res.json({ version: '1.15', timestamp: new Date().toISOString() });
 });
 
-// ADMIN: Temporary Batch DNS Sync Trigger
+// ADMIN: Temporary Batch DNS Sync Trigger (cPanel Version)
 app.get('/api/admin/sync-dns', async (req, res) => {
     const adminKey = req.query.key;
     if (adminKey !== 'goxmr-sovereign-admin') {

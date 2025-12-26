@@ -17,6 +17,7 @@ console.log('MONERO_WALLET_ADDRESS exists:', !!process.env.MONERO_WALLET_ADDRESS
 console.log('MONERO_VIEW_KEY exists:', !!process.env.MONERO_VIEW_KEY);
 console.log('--- END ENV DEBUG ---');
 const sharp = require('sharp');
+const dnsUtil = require('./dns');
 const {
     generateRegistrationOptions,
     verifyRegistrationResponse,
@@ -278,9 +279,18 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
                 await dbRun('INSERT INTO wallets (user_id, currency, label, address) VALUES (?, ?, ?, ?)', [userId, w.currency, w.label, w.address]);
             }
         }
-        res.json({ message: 'Dashboard Deployed Successfully' });
-        const user = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
-        if (user) profileCache.del(`user:${user.username}`);
+
+        // Automated OpenAlias via Namecheap API
+        const xmrWallet = wallets?.find(w => w.currency === 'XMR');
+        if (xmrWallet && xmrWallet.address) {
+            // Run DNS update in background to not block the response
+            dnsUtil.updateOpenAlias(req.user.username, xmrWallet.address).catch(err => {
+                console.error('[DNS_AUTO] Failed background update:', err);
+            });
+        }
+
+        profileCache.del(`user:${req.user.username}`);
+        res.json({ message: 'Profile synced' });
     } catch (err) {
         console.error('SYNC Error:', err);
         res.status(500).json({ error: 'Sync failed' });

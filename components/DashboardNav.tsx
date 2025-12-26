@@ -18,7 +18,7 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
     const scrollToSection = (id: string) => {
         const element = document.getElementById(id);
         if (element) {
-            const offset = 100; 
+            const offset = 100;
             const elementPosition = element.getBoundingClientRect().top;
             const offsetPosition = elementPosition + window.pageYOffset - offset;
             window.scrollTo({
@@ -29,10 +29,10 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
     };
     return (
         <div className="hidden lg:block sticky top-32 w-full self-start">
-            <div className="border border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex items-center gap-2 mb-6 border-b-2 border-dashed border-gray-200 pb-2">
-                    <Terminal size={16} />
-                    <h3 className="font-mono font-bold text-xs uppercase">SYSTEM_MONITOR</h3>
+            <div className="border border-black dark:border-white bg-white dark:bg-zinc-900 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-colors">
+                <div className="flex items-center gap-2 mb-6 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
+                    <Terminal size={16} className="dark:text-white" />
+                    <h3 className="font-mono font-bold text-xs uppercase dark:text-white">SYSTEM_MONITOR</h3>
                 </div>
                 <div className="space-y-1">
                     {NAV_ITEMS.map((item) => {
@@ -42,8 +42,8 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
                                 key={item.id}
                                 onClick={() => scrollToSection(item.id)}
                                 className={`w-full text-left font-mono text-xs py-2 px-2 flex justify-between items-center group transition-colors ${isActive
-                                    ? 'bg-black text-white'
-                                    : 'text-gray-500 hover:text-black hover:bg-gray-100'
+                                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-[2px_2px_0px_0px_rgba(242,104,34,1)]'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'
                                     }`}
                             >
                                 <span className="flex items-center gap-2">
@@ -57,16 +57,16 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
                         );
                     })}
                 </div>
-                <div className="mt-8 pt-4 border-t-2 border-dashed border-gray-200">
-                    <div className="font-mono text-[10px] text-gray-400 mb-2 font-bold uppercase tracking-widest">Global Ops</div>
+                <div className="mt-8 pt-4 border-t-2 border-dashed border-gray-200 dark:border-zinc-800">
+                    <div className="font-mono text-[10px] text-gray-400 dark:text-gray-500 mb-2 font-bold uppercase tracking-widest">Global Ops</div>
                     <button
                         onClick={onDeploy}
                         disabled={isDeploying}
-                        className={`w-full border-2 border-black p-3 font-mono text-xs font-black uppercase tracking-tighter flex items-center justify-center gap-2 transition-all relative overflow-hidden active:translate-y-[2px] active:shadow-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${isDeploying
-                            ? 'bg-gray-100 text-gray-400 border-gray-300 shadow-none translate-y-[2px]'
+                        className={`w-full border-2 border-black dark:border-white p-3 font-mono text-xs font-black uppercase tracking-tighter flex items-center justify-center gap-2 transition-all relative overflow-hidden active:translate-y-[2px] active:shadow-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] ${isDeploying
+                            ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-gray-300 dark:border-zinc-700 shadow-none translate-y-[2px]'
                             : deployed
-                                ? 'bg-green-500 text-white border-green-700'
-                                : 'bg-black text-white hover:bg-gray-800'
+                                ? 'bg-green-500 text-white border-green-700 dark:border-green-400'
+                                : 'bg-black dark:bg-white text-white dark:text-black hover:bg-monero-orange dark:hover:bg-monero-orange hover:text-white transition-colors'
                             }`}
                     >
                         {isDeploying ? (
@@ -90,10 +90,10 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
                         )}
                     </button>
                 </div>
-                <div className="mt-6 pt-4 border-t border-gray-100">
-                    <div className="font-mono text-[10px] text-gray-400 mb-2">MEMORY_USAGE</div>
-                    <div className="h-2 w-full bg-gray-100 overflow-hidden">
-                        <div className="h-full bg-black w-[45%] animate-pulse"></div>
+                <div className="mt-6 pt-4 border-t border-gray-100 dark:border-zinc-800">
+                    <div className="font-mono text-[10px] text-gray-400 dark:text-gray-500 mb-2">MEMORY_USAGE</div>
+                    <div className="h-2 w-full bg-gray-100 dark:bg-zinc-800 overflow-hidden">
+                        <div className="h-full bg-black dark:bg-monero-orange w-[45%] animate-pulse"></div>
                     </div>
                 </div>
             </div>

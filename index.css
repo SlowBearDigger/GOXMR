@@ -20,10 +20,15 @@
 
 @layer base {
     body {
-        background-color: #ffffff;
-        color: #000000;
+        @apply bg-white text-black transition-colors duration-300;
         overflow-x: hidden;
         font-family: 'Space Grotesk', sans-serif;
+        --grid-color: rgba(0, 0, 0, 0.1);
+    }
+
+    body.dark {
+        @apply bg-[#000000] text-white;
+        --grid-color: rgba(255, 255, 255, 0.1);
     }
 }
 

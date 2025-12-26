@@ -82,17 +82,17 @@ export const Terminal: React.FC = () => {
   };
   return (
     <div
-      className="w-full max-w-md border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 font-mono text-xs md:text-sm relative overflow-hidden h-80 flex flex-col z-20 cursor-text"
+      className="w-full max-w-md border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] p-4 font-mono text-xs md:text-sm relative overflow-hidden h-80 flex flex-col z-20 cursor-text"
       onClick={() => !isSequencePlaying && inputRef.current?.focus()}
     >
-      <div className="flex items-center justify-between border-b-2 border-black pb-2 mb-2 bg-gray-50 -mx-4 -mt-4 px-4 py-2 select-none">
+      <div className="flex items-center justify-between border-b-2 border-black dark:border-white pb-2 mb-2 bg-gray-50 dark:bg-zinc-800 -mx-4 -mt-4 px-4 py-2 select-none">
         <div className="flex items-center gap-2">
           <TerminalIcon size={16} className="text-monero-orange" />
-          <span className="font-bold uppercase tracking-widest text-xs">VISITOR@SHELL:~</span>
+          <span className="font-bold uppercase tracking-widest text-xs dark:text-white">VISITOR@SHELL:~</span>
         </div>
         <div className="flex gap-1">
-          <div className="w-3 h-3 rounded-full border border-black bg-transparent"></div>
-          <div className="w-3 h-3 rounded-full border border-black bg-transparent"></div>
+          <div className="w-3 h-3 rounded-full border border-black dark:border-white bg-transparent"></div>
+          <div className="w-3 h-3 rounded-full border border-black dark:border-white bg-transparent"></div>
         </div>
       </div>
       <div
@@ -100,16 +100,16 @@ export const Terminal: React.FC = () => {
         className="flex-1 overflow-y-auto scrollbar-hide font-bold leading-relaxed whitespace-pre-wrap"
       >
         {history.map((line, i) => (
-          <div key={i} className={`mb-1 ${line.type === 'command' ? 'text-black' :
+          <div key={i} className={`mb-1 ${line.type === 'command' ? 'text-black dark:text-white' :
             line.type === 'error' ? 'text-red-600' :
-              line.type === 'special' ? 'text-green-600 tracking-widest' : 'text-green-700'
+              line.type === 'special' ? 'text-green-600 tracking-widest' : 'text-green-700 dark:text-green-400'
             }`}>
             {line.type === 'command' && <span className="text-monero-orange mr-2">➜</span>}
             {line.text}
           </div>
         ))}
         {!isSequencePlaying && (
-          <div className="flex items-center text-black">
+          <div className="flex items-center text-black dark:text-white">
             <span className="text-monero-orange mr-2">➜</span>
             <input
               ref={inputRef}
@@ -117,7 +117,7 @@ export const Terminal: React.FC = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 bg-transparent border-none outline-none font-bold"
+              className="flex-1 bg-transparent border-none outline-none font-bold dark:text-white"
               autoFocus
             />
           </div>
@@ -125,7 +125,7 @@ export const Terminal: React.FC = () => {
       </div>
       <div className="absolute bottom-2 right-2 opacity-10 pointer-events-none">
         <svg width="60" height="60" viewBox="0 0 100 100">
-          <path d="M50 0 L100 25 L100 75 L50 100 L0 75 L0 25 Z" fill="none" stroke="black" strokeWidth="2" />
+          <path d="M50 0 L100 25 L100 75 L50 100 L0 75 L0 25 Z" fill="none" stroke="currentColor" className="text-black dark:text-white" strokeWidth="2" />
         </svg>
       </div>
     </div>

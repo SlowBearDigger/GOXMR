@@ -43,52 +43,52 @@ export const DonationGoal: React.FC = () => {
         <>
             <div
                 onClick={() => setIsOpen(true)}
-                className="font-mono text-xs border border-black px-2 py-1 rounded-sm bg-gray-50 flex flex-col items-center justify-center relative min-w-[140px] overflow-hidden group cursor-pointer hover:border-monero-orange transition-colors"
+                className="font-mono text-xs border border-black dark:border-white px-2 py-1 rounded-sm bg-gray-50 dark:bg-zinc-900 flex flex-col items-center justify-center relative min-w-[140px] overflow-hidden group cursor-pointer hover:border-monero-orange transition-colors dark:text-white"
                 title="Click to Contribute"
             >
                 <div
-                    className="absolute left-0 top-0 bottom-0 bg-monero-orange/20 transition-all duration-1000"
+                    className="absolute left-0 top-0 bottom-0 bg-monero-orange/20 dark:bg-monero-orange/10 transition-all duration-1000"
                     style={{ width: `${percent}%` }}
                 ></div>
                 <div className="relative z-10 font-bold flex gap-2">
                     <span>DEV_FUND</span>
                     <span>{Math.round(percent)}%</span>
                 </div>
-                <div className="absolute inset-0 bg-black text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 font-bold">
+                <div className="absolute inset-0 bg-black dark:bg-white text-white dark:text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 font-bold text-center">
                     {isSyncing ? "SYNCING..." : `${current.toFixed(4)} / ${goal} XMR`}
                 </div>
             </div>
 
             <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="DEV_FUND_CONTRIBUTION">
                 <div className="flex flex-col gap-4">
-                    <div className="bg-gray-50 border-l-4 border-monero-orange p-3 text-xs">
-                        <p className="font-bold uppercase mb-1">Support The Architect</p>
-                        <p className="text-gray-600">Funds are used for domain renewals, server hosting, and caffeine. Helps keep GoXMR sovereign and tracker-free.</p>
+                    <div className="bg-gray-50 dark:bg-zinc-800/50 border-l-4 border-monero-orange p-3 text-xs">
+                        <p className="font-bold uppercase mb-1 dark:text-white">Support The Architect</p>
+                        <p className="text-gray-600 dark:text-zinc-400">Funds are used for domain renewals, server hosting, and caffeine. Helps keep GoXMR sovereign and tracker-free.</p>
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-gray-500">Monero Address (Primary)</label>
+                        <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-zinc-500">Monero Address (Primary)</label>
                         <div
-                            className="w-full bg-gray-100 border-2 border-dashed border-gray-300 p-3 text-[10px] font-mono break-all cursor-pointer hover:bg-white hover:border-black transition-colors relative group"
+                            className="w-full bg-gray-100 dark:bg-zinc-950 border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 text-[10px] font-mono break-all cursor-pointer hover:bg-white dark:hover:bg-zinc-900 hover:border-black dark:hover:border-white transition-colors relative group dark:text-white"
                             onClick={handleCopy}
                         >
                             {WALLET_ADDRESS}
-                            <div className="absolute top-2 right-2 text-gray-400 group-hover:text-black">
+                            <div className="absolute top-2 right-2 text-gray-400 group-hover:text-black dark:group-hover:text-white">
                                 {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                             </div>
                         </div>
                         {copied && <span className="text-[10px] text-green-600 font-bold uppercase animate-pulse">Address Copied to Clipboard</span>}
                     </div>
 
-                    <div className="mt-2 text-[9px] text-gray-400 font-mono border-t border-gray-200 pt-2">
-                        <div className="flex items-center gap-1 mb-1 font-bold uppercase text-gray-500">
+                    <div className="mt-2 text-[9px] text-gray-400 dark:text-zinc-500 font-mono border-t border-gray-200 dark:border-zinc-800 pt-2">
+                        <div className="flex items-center gap-1 mb-1 font-bold uppercase text-gray-500 dark:text-zinc-400">
                             <Info size={10} /> Tracking Logic {isSyncing ? '(SYNCING...)' : '(ONLINE)'}
                         </div>
                         <p className="leading-tight mb-2">
                             Progress is tracked using a <strong>Private View Key</strong> scanner.
                             The system queries the blockchain for incoming TXs to verify the goal status without exposing sender data.
                         </p>
-                        <div className="flex justify-between border-t border-gray-100 pt-1">
+                        <div className="flex justify-between border-t border-gray-100 dark:border-zinc-900 pt-1">
                             <span>Height Scanned: {height}</span>
                             <span>Node: {isSyncing ? <RefreshCw className="inline animate-spin" size={10} /> : 'Synced'}</span>
                         </div>
@@ -96,7 +96,7 @@ export const DonationGoal: React.FC = () => {
 
                     <button
                         onClick={() => setIsOpen(false)}
-                        className="w-full bg-black text-white py-3 uppercase font-bold hover:bg-monero-orange transition-colors"
+                        className="w-full bg-black dark:bg-white text-white dark:text-black py-3 uppercase font-bold hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-colors"
                     >
                         Close
                     </button>

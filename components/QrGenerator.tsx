@@ -183,13 +183,13 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({ wallets, qrDesign, onQ
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-12">
             { }
-            <div className="lg:col-span-12 flex items-center gap-4 border-b-2 border-black pb-4 mb-4">
-                <div className="w-12 h-12 bg-black text-white flex items-center justify-center">
+            <div className="lg:col-span-12 flex items-center gap-4 border-b-2 border-black dark:border-zinc-800 pb-4 mb-4">
+                <div className="w-12 h-12 bg-black dark:bg-white text-white dark:text-black flex items-center justify-center">
                     <Wallet size={24} />
                 </div>
                 <div>
-                    <h2 className="text-2xl font-black font-mono uppercase">QR Foundry</h2>
-                    <p className="font-mono text-sm text-gray-500">Forge custom cryptographic payment codes.</p>
+                    <h2 className="text-2xl font-black font-mono uppercase dark:text-white">QR Foundry</h2>
+                    <p className="font-mono text-sm text-gray-500 dark:text-gray-400">Forge custom cryptographic payment codes.</p>
                 </div>
             </div>
             <div className="lg:col-span-7">

@@ -21,6 +21,7 @@ const initDb = () => {
                 profile_image TEXT,
                 banner_image TEXT,
                 design_config TEXT,
+                pgp_public_key TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         `, (err) => {
@@ -30,6 +31,8 @@ const initDb = () => {
         db.run(`ALTER TABLE users ADD COLUMN recovery_hash TEXT`, (err) => {
         });
         db.run(`ALTER TABLE users ADD COLUMN design_config TEXT`, (err) => {
+        });
+        db.run(`ALTER TABLE users ADD COLUMN pgp_public_key TEXT`, (err) => {
         });
         db.run(`
             CREATE TABLE IF NOT EXISTS wallets (
@@ -48,9 +51,12 @@ const initDb = () => {
                 type TEXT,
                 title TEXT,
                 url TEXT,
+                icon TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )
         `);
+        db.run(`ALTER TABLE links ADD COLUMN icon TEXT`, (err) => {
+        });
         db.run(`
             CREATE TABLE IF NOT EXISTS authenticators (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

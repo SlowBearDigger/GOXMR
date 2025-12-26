@@ -25,12 +25,12 @@ export const PriceTicker: React.FC = () => {
     }, []);
 
     return (
-        <div className="font-mono text-xs border border-black px-2 py-1 rounded-sm bg-gray-50 flex items-center gap-2 min-w-[120px] justify-center">
+        <div className="font-mono text-xs border border-black dark:border-white px-2 py-1 rounded-sm bg-gray-50 dark:bg-zinc-900 flex items-center gap-2 min-w-[120px] justify-center dark:text-white">
             <div className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
             {price ? (
                 <span className="font-bold">XMR: ${price}</span>
             ) : (
-                <span className="text-gray-500">LOADING...</span>
+                <span className="text-gray-500 dark:text-zinc-500">LOADING...</span>
             )}
         </div>
     );

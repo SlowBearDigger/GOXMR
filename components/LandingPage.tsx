@@ -105,9 +105,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
                         <GlitchText
                             text="GOXMR"
                             as="h1"
-                            className="text-8xl md:text-[10rem] font-bold leading-none tracking-tighter text-black"
+                            className="text-8xl md:text-[10rem] font-bold leading-none tracking-tighter text-black dark:text-white"
                         />
-                        <h2 className="text-4xl md:text-6xl font-bold text-transparent text-stroke-black mt-[-10px] md:mt-[-20px] opacity-50">
+                        <h2 className="text-4xl md:text-6xl font-bold text-transparent text-stroke-black dark:text-stroke-white mt-[-10px] md:mt-[-20px] opacity-50">
                             SOVEREIGN
                         </h2>
                         <div className="absolute top-0 right-10 md:right-20 w-24 h-24 border-2 border-monero-orange rounded-full opacity-20 animate-spin-slow pointer-events-none flex items-center justify-center">
@@ -115,15 +115,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
                         </div>
                     </div>
 
-                    <p className="text-xl md:text-2xl font-mono max-w-xl border-l-4 border-monero-orange pl-6 py-2 bg-gray-50">
-                        The privacy-first <span className="font-bold bg-black text-white px-1">link-in-bio</span>. Accept Monero, Bitcoin, and more. 0% fees, 0% tracking.
+                    <p className="text-xl md:text-2xl font-mono max-w-xl border-l-4 border-monero-orange pl-6 py-2 bg-gray-50 dark:bg-zinc-900 dark:text-gray-300">
+                        The privacy-first <span className="font-bold bg-black dark:bg-white text-white dark:text-black px-1">link-in-bio</span>. Accept Monero, Bitcoin, and more. 0% fees, 0% tracking.
                     </p>
 
                     <div className="flex flex-col w-full max-w-md">
-                        <div className={`flex border-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-full transition-colors ${isAvailable === true ? 'border-green-600 bg-green-50' :
-                            isAvailable === false ? 'border-red-600 bg-red-50' : 'border-black bg-white'
+                        <div className={`flex border-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] w-full transition-colors ${isAvailable === true ? 'border-green-600 bg-green-50 dark:bg-green-900/10' :
+                            isAvailable === false ? 'border-red-600 bg-red-50 dark:bg-red-900/10' : 'border-black dark:border-white bg-white dark:bg-zinc-900'
                             }`}>
-                            <div className="bg-gray-100 px-4 py-3 border-r-2 border-black font-mono text-gray-500 hidden sm:flex items-center">
+                            <div className="bg-gray-100 dark:bg-zinc-800 px-4 py-3 border-r-2 border-black dark:border-white font-mono text-gray-500 dark:text-gray-400 hidden sm:flex items-center">
                                 goxmr.click/
                             </div>
                             <div className="relative flex-1 flex items-center">
@@ -132,7 +132,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
                                     placeholder="yourname"
-                                    className="w-full px-4 py-3 outline-none font-mono font-bold bg-transparent placeholder:text-gray-300"
+                                    className="w-full px-4 py-3 outline-none font-mono font-bold bg-transparent placeholder:text-gray-300 dark:placeholder:text-zinc-600 dark:text-white"
                                 />
                                 <div className="absolute right-3">
                                     {isChecking ? (
@@ -143,7 +143,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
                             <button
                                 onClick={handleClaim}
                                 disabled={isAvailable === false}
-                                className={`px-6 py-3 font-bold border-l-2 border-black transition-colors flex items-center gap-2 ${isAvailable === false ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-monero-orange text-white hover:bg-black'
+                                className={`px-6 py-3 font-bold border-l-2 border-black dark:border-white transition-colors flex items-center gap-2 ${isAvailable === false ? 'bg-gray-300 dark:bg-zinc-800 text-gray-500 cursor-not-allowed' : 'bg-monero-orange text-white hover:bg-black dark:hover:bg-zinc-800'
                                     }`}
                             >
                                 {isChecking ? 'CHECKING...' : isAvailable === false ? 'TAKEN' : 'CLAIM'} <ArrowRight size={18} />
@@ -157,7 +157,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
                 </div>
 
                 <div className="lg:col-span-5 flex flex-col gap-6 lg:mt-24 relative">
-                    <div className="absolute -top-12 -right-12 text-9xl font-bold text-gray-100 select-none z-[-1] overflow-hidden">
+                    <div className="absolute -top-12 -right-12 text-9xl font-bold text-gray-100 dark:text-zinc-900 select-none z-[-1] overflow-hidden">
                         XMR
                     </div>
                     <div className="transform lg:translate-x-8 transition-transform hover:scale-[1.02] duration-300">
@@ -165,78 +165,78 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 max-w-2xl ml-auto mr-0 transform lg:-translate-x-4">
-                        <div className="border-2 border-black p-3 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 hover:bg-black hover:text-white transition-colors group">
+                        <div className="border-2 border-black dark:border-white p-3 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] flex flex-col justify-between h-28 hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black transition-colors group">
                             <div className="flex justify-between items-start">
                                 <Lock size={16} className="text-monero-orange" />
-                                <span className="font-mono text-[9px] uppercase opacity-60">Privacy</span>
+                                <span className="font-mono text-[9px] uppercase opacity-60 dark:opacity-40">Privacy</span>
                             </div>
-                            <div className="font-mono text-lg font-bold">100%</div>
-                            <div className="w-full bg-gray-200 h-1 mt-1">
-                                <div className="bg-monero-orange h-full w-[100%] group-hover:bg-white"></div>
+                            <div className="font-mono text-lg font-bold dark:text-white group-hover:dark:text-black">100%</div>
+                            <div className="w-full bg-gray-200 dark:bg-zinc-800 h-1 mt-1">
+                                <div className="bg-monero-orange h-full w-[100%] group-hover:bg-white group-hover:dark:bg-black"></div>
                             </div>
                         </div>
 
-                        <div className="border-2 border-black p-3 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 hover:bg-black hover:text-white transition-colors group">
+                        <div className="border-2 border-black dark:border-white p-3 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] flex flex-col justify-between h-28 hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black transition-colors group">
                             <div className="flex justify-between items-start">
                                 <Key size={16} className="text-monero-orange" />
-                                <span className="font-mono text-[9px] uppercase opacity-60">Security</span>
+                                <span className="font-mono text-[9px] uppercase opacity-60 dark:opacity-40">Security</span>
                             </div>
-                            <div className="font-mono text-xs font-bold leading-tight">
+                            <div className="font-mono text-xs font-bold leading-tight dark:text-white group-hover:dark:text-black">
                                 YubiKey<br />FIDO2<br />Passkeys
                             </div>
-                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400">
+                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400 group-hover:dark:text-green-600">
                                 + HARDWARE
                             </div>
                         </div>
 
-                        <div className="border-2 border-black p-3 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 hover:bg-black hover:text-white transition-colors group">
+                        <div className="border-2 border-black dark:border-white p-3 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] flex flex-col justify-between h-28 hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black transition-colors group">
                             <div className="flex justify-between items-start">
                                 <QrCode size={16} className="text-monero-orange" />
-                                <span className="font-mono text-[9px] uppercase opacity-60">Branding</span>
+                                <span className="font-mono text-[9px] uppercase opacity-60 dark:opacity-40">Branding</span>
                             </div>
-                            <div className="font-mono text-xs font-bold leading-tight">
+                            <div className="font-mono text-xs font-bold leading-tight dark:text-white group-hover:dark:text-black">
                                 Custom<br />QR Styles
                             </div>
-                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400">
+                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400 group-hover:dark:text-green-600">
                                 + UNIQUE
                             </div>
                         </div>
 
-                        <div className="border-2 border-black p-3 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 hover:bg-black hover:text-white transition-colors group">
+                        <div className="border-2 border-black dark:border-white p-3 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] flex flex-col justify-between h-28 hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black transition-colors group">
                             <div className="flex justify-between items-start">
                                 <Wallet size={16} className="text-monero-orange" />
-                                <span className="font-mono text-[9px] uppercase opacity-60">Donations</span>
+                                <span className="font-mono text-[9px] uppercase opacity-60 dark:opacity-40">Donations</span>
                             </div>
-                            <div className="font-mono text-xs font-bold leading-tight">
+                            <div className="font-mono text-xs font-bold leading-tight dark:text-white group-hover:dark:text-black">
                                 XMR BTC<br />LTC ETH<br />USDT
                             </div>
-                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400">
+                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400 group-hover:dark:text-green-600">
                                 + MULTI-CHAIN
                             </div>
                         </div>
 
-                        <div className="border-2 border-black p-3 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 hover:bg-black hover:text-white transition-colors group">
+                        <div className="border-2 border-black dark:border-white p-3 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] flex flex-col justify-between h-28 hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black transition-colors group">
                             <div className="flex justify-between items-start">
                                 <Code size={16} className="text-monero-orange" />
-                                <span className="font-mono text-[9px] uppercase opacity-60">Transparent</span>
+                                <span className="font-mono text-[9px] uppercase opacity-60 dark:opacity-40">Transparent</span>
                             </div>
-                            <div className="font-mono text-xs font-bold leading-tight">
+                            <div className="font-mono text-xs font-bold leading-tight dark:text-white group-hover:dark:text-black">
                                 100% Free<br />& Open Source
                             </div>
-                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400">
+                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400 group-hover:dark:text-green-600">
                                 + MIT LICENSE
                             </div>
                         </div>
 
-                        <div className="border-2 border-black p-3 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 hover:bg-black hover:text-white transition-colors group">
+                        <div className="border-2 border-black dark:border-white p-3 bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] flex flex-col justify-between h-28 hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black transition-colors group">
                             <div className="flex justify-between items-start">
                                 <FileKey size={16} className="text-monero-orange" />
-                                <span className="font-mono text-[9px] uppercase opacity-60">Access</span>
+                                <span className="font-mono text-[9px] uppercase opacity-60 dark:opacity-40">Access</span>
                             </div>
-                            <div className="font-mono text-xs font-bold leading-tight">
+                            <div className="font-mono text-xs font-bold leading-tight dark:text-white group-hover:dark:text-black">
                                 Biometric &<br />Passkey Auth
                             </div>
-                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400">
+                            <div className="font-mono text-[8px] text-green-600 group-hover:text-green-400 group-hover:dark:text-green-600">
                                 + PASSWORDLESS
                             </div>
                         </div>
@@ -252,6 +252,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
             <style>{`
                 .text-stroke-black {
                     -webkit-text-stroke: 1px black;
+                }
+                .dark .text-stroke-white {
+                    -webkit-text-stroke: 1px white;
                 }
                 .animate-spin-slow {
                     animation: spin 10s linear infinite;

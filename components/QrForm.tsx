@@ -34,12 +34,12 @@ interface QrFormProps {
     disposableTimeout: number; onDisposableTimeoutChange: (v: number) => void;
 }
 const AccordionSection: React.FC<{ title: string; children: React.ReactNode; isOpen: boolean; onToggle: () => void; }> = ({ title, children, isOpen, onToggle }) => (
-    <div className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all mb-4">
-        <button onClick={onToggle} className="w-full flex justify-between items-center p-3 text-left bg-black hover:bg-gray-900 text-white transition-colors">
+    <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-all mb-4">
+        <button onClick={onToggle} className="w-full flex justify-between items-center p-3 text-left bg-black dark:bg-white hover:bg-gray-900 dark:hover:bg-gray-100 text-white dark:text-black transition-colors">
             <span className="font-mono font-bold uppercase text-sm">{title}</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
         </button>
-        {isOpen && <div className="p-4 border-t-2 border-black font-mono">{children}</div>}
+        {isOpen && <div className="p-4 border-t-2 border-black dark:border-white font-mono">{children}</div>}
     </div>
 );
 export const QrForm: React.FC<QrFormProps> = (props) => {
@@ -76,22 +76,22 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
     return (
         <div className="w-full space-y-4">
             { }
-            <div className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 font-mono">
-                <h2 className="font-bold text-lg border-b-2 border-black pb-2 mb-4 uppercase flex items-center gap-2">
+            <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] p-4 font-mono">
+                <h2 className="font-bold text-lg border-b-2 border-black dark:border-zinc-800 pb-2 mb-4 uppercase flex items-center gap-2 dark:text-white">
                     <div className="w-3 h-3 bg-monero-orange"></div> 1. Source & Content
                 </h2>
                 <div className="flex flex-col gap-4">
                     { }
                     <div>
-                        <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Select Wallet</label>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Select Wallet</label>
                         <div className="grid grid-cols-1 gap-2">
                             {wallets.map(w => (
                                 <button
                                     key={w.id}
                                     onClick={() => onWalletChange(w.id)}
                                     className={`text-left p-3 border-2 transition-all flex items-center gap-3 ${selectedWalletId === w.id
-                                        ? 'bg-black text-white border-black'
-                                        : 'bg-white text-black border-gray-200 hover:border-black'
+                                        ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white'
+                                        : 'bg-white dark:bg-zinc-800 text-black dark:text-white border-gray-200 dark:border-zinc-700 hover:border-black dark:hover:border-white'
                                         }`}
                                 >
                                     <div className={`w-4 h-4 rounded-full border border-current flex items-center justify-center text-[8px] font-bold ${w.currency === 'XMR' ? 'text-monero-orange' : 'text-yellow-500'}`}>
@@ -107,15 +107,15 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Manual Override / Content</label>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Manual Override / Content</label>
                         <textarea
                             value={content}
                             onChange={handleAutodetectChange}
-                            className="w-full border-2 border-black p-3 text-sm h-16 font-mono outline-none focus:bg-gray-50 bg-gray-100"
+                            className="w-full border-2 border-black dark:border-white p-3 text-sm h-16 font-mono outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 bg-gray-100 dark:bg-zinc-800 dark:text-white"
                             placeholder={currentCrypto?.placeholder}
                         />
                         {detectedCrypto && (
-                            <div className="mt-1 text-xs font-bold text-green-700">
+                            <div className="mt-1 text-xs font-bold text-green-700 dark:text-green-400">
                                 DETECTED: {detectedCrypto.toUpperCase()}
                             </div>
                         )}
@@ -126,54 +126,54 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
             <AccordionSection title="2. Design & Branding" isOpen={openSection === 0} onToggle={() => handleToggle(0)}>
                 <div className="space-y-6">
                     <div>
-                        <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Quick Presets</label>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Quick Presets</label>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             {presets.map(p => (
-                                <button key={p.name} onClick={() => onApplyPreset(p)} className={`p-2 text-xs border-2 font-bold transition-all ${activePreset === p.name ? 'bg-monero-orange text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-gray-100 text-gray-500 border-transparent hover:border-gray-300'}`}>
+                                <button key={p.name} onClick={() => onApplyPreset(p)} className={`p-2 text-xs border-2 font-bold transition-all ${activePreset === p.name ? 'bg-monero-orange text-white border-black dark:border-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 border-transparent hover:border-gray-300 dark:hover:border-zinc-700'}`}>
                                     {p.name}
                                 </button>
                             ))}
                         </div>
                     </div>
-                    <div className="border border-gray-200 p-4 space-y-4 bg-gray-50">
+                    <div className="border border-gray-200 dark:border-zinc-800 p-4 space-y-4 bg-gray-50 dark:bg-zinc-800/50">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold uppercase text-gray-800">Dot Colors</label>
+                            <label className="text-xs font-bold uppercase text-gray-800 dark:text-gray-200">Dot Colors</label>
                             <label className="flex items-center space-x-2 cursor-pointer">
-                                <span className="text-xs text-gray-500">Use Gradient</span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">Use Gradient</span>
                                 <input type="checkbox" checked={useGradient} onChange={(e) => onUseGradientChange(e.target.checked)} className="accent-monero-orange" />
                             </label>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[10px] uppercase text-gray-400 mb-1">Primary Color</label>
-                                <input type="color" value={color} onChange={(e) => onColorChange(e.target.value)} className="h-8 w-full cursor-pointer border-2 border-black p-0.5 bg-white" />
+                                <label className="block text-[10px] uppercase text-gray-400 dark:text-gray-500 mb-1">Primary Color</label>
+                                <input type="color" value={color} onChange={(e) => onColorChange(e.target.value)} className="h-8 w-full cursor-pointer border-2 border-black dark:border-white p-0.5 bg-white dark:bg-zinc-700" />
                             </div>
                             <div className={`transition-opacity duration-300 ${useGradient ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
-                                <label className="block text-[10px] uppercase text-gray-400 mb-1">Gradient End</label>
-                                <input type="color" value={gradientColor} onChange={(e) => onGradientColorChange(e.target.value)} className="h-8 w-full cursor-pointer border-2 border-black p-0.5 bg-white" disabled={!useGradient} />
+                                <label className="block text-[10px] uppercase text-gray-400 dark:text-gray-500 mb-1">Gradient End</label>
+                                <input type="color" value={gradientColor} onChange={(e) => onGradientColorChange(e.target.value)} className="h-8 w-full cursor-pointer border-2 border-black dark:border-white p-0.5 bg-white dark:bg-zinc-700" disabled={!useGradient} />
                             </div>
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Background</label>
-                        <div className="flex items-center space-x-3 p-2 border-2 border-black bg-white">
-                            <input type="color" value={backgroundColor} onChange={(e) => onBackgroundColorChange(e.target.value)} className="h-8 w-12 cursor-pointer border border-black bg-white p-0.5" />
-                            <span className="text-xs font-mono font-bold uppercase">{backgroundColor}</span>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Background</label>
+                        <div className="flex items-center space-x-3 p-2 border-2 border-black dark:border-white bg-white dark:bg-zinc-800">
+                            <input type="color" value={backgroundColor} onChange={(e) => onBackgroundColorChange(e.target.value)} className="h-8 w-12 cursor-pointer border border-black dark:border-white bg-white dark:bg-zinc-700 p-0.5" />
+                            <span className="text-xs font-mono font-bold uppercase dark:text-white">{backgroundColor}</span>
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Pattern Style</label>
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Pattern Style</label>
                         <div className="grid grid-cols-3 gap-2">
                             {shapeOptions.map(s => (
-                                <button key={s.id} onClick={() => onShapeChange(s.id)} className={`py-2 px-1 text-[10px] font-bold border-2 uppercase transition-all ${shape === s.id ? 'bg-black text-white border-black' : 'bg-white text-gray-400 border-gray-200'}`}>{s.label}</button>
+                                <button key={s.id} onClick={() => onShapeChange(s.id)} className={`py-2 px-1 text-[10px] font-bold border-2 uppercase transition-all ${shape === s.id ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white' : 'bg-white dark:bg-zinc-800 text-gray-400 border-gray-200 dark:border-zinc-700'}`}>{s.label}</button>
                             ))}
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Center Logo</label>
-                        <label className="flex items-center justify-center w-full p-4 border-2 border-dashed border-gray-300 hover:border-monero-orange hover:bg-orange-50 transition-colors cursor-pointer group relative overflow-hidden">
+                        <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Center Logo</label>
+                        <label className="flex items-center justify-center w-full p-4 border-2 border-dashed border-gray-300 dark:border-zinc-700 hover:border-monero-orange hover:bg-orange-50 dark:hover:bg-monero-orange/10 transition-colors cursor-pointer group relative overflow-hidden">
                             {props.logoUrl && (
-                                <img src={props.logoUrl} className="absolute inset-0 w-full h-full object-contain opacity-30 group-hover:opacity-10" />
+                                <img src={props.logoUrl} className="absolute inset-0 w-full h-full object-contain opacity-30 dark:opacity-50 group-hover:opacity-10" />
                             )}
                             <div className="z-10 flex items-center">
                                 <Upload className="text-gray-400 group-hover:text-monero-orange" size={20} />
@@ -187,7 +187,7 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
                 </div>
             </AccordionSection>
             <AccordionSection title="3. Developer Code" isOpen={openSection === 1} onToggle={() => handleToggle(1)}>
-                <div className="bg-gray-100 p-4 border border-gray-300 text-xs font-mono overflow-x-auto">
+                <div className="bg-gray-100 dark:bg-zinc-800 p-4 border border-gray-300 dark:border-zinc-700 text-xs font-mono overflow-x-auto dark:text-white">
                     <pre className="whitespace-pre-wrap">{codeSnippet}</pre>
                 </div>
             </AccordionSection>

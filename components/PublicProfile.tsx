@@ -313,9 +313,46 @@ export const PublicProfile: React.FC = () => {
                                 ))}
                             </div>
 
-                            <p className="font-mono text-sm sm:text-base text-gray-700 w-full max-w-lg mx-auto mb-10 leading-relaxed border-l-4 border-accent pl-4 text-left bg-gray-50/50 py-3" style={{ color: TC || 'inherit' }}>
+                            <p className="font-mono text-sm sm:text-base text-gray-700 w-full max-w-lg mx-auto mb-6 leading-relaxed border-l-4 border-accent pl-4 text-left bg-gray-50/50 py-3" style={{ color: TC || 'inherit' }}>
                                 {profile?.bio || "No manifesto encrypted."}
                             </p>
+
+                            {xmrWallet && (
+                                <div className="mb-10 w-full max-w-lg mx-auto bg-black text-white p-3 border-2 border-accent shadow-accent animate-in fade-in slide-in-from-top-4 duration-1000">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[8px] font-bold uppercase tracking-widest text-monero-orange">Wallet_Lookup_Protocol</span>
+                                        <div className="flex gap-1">
+                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+                                            <div className="w-1 h-1 bg-green-500 rounded-full"></div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                        <div className="font-mono text-[10px] sm:text-xs truncate">
+                                            <span className="text-gray-500">@</span>
+                                            <span className="text-white font-bold">{username}</span>
+                                            <span className="text-gray-500">@{(() => {
+                                                const parts = window.location.hostname.split('.');
+                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                            })()}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const rootDomain = (() => {
+                                                    const parts = window.location.hostname.split('.');
+                                                    return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
+                                                })();
+                                                const handle = `@${username}@${rootDomain}`;
+                                                navigator.clipboard.writeText(handle);
+                                                setCopied(handle);
+                                                setTimeout(() => setCopied(null), 2000);
+                                            }}
+                                            className="shrink-0 text-[10px] border border-white/20 px-2 py-0.5 hover:bg-white hover:text-black transition-colors"
+                                        >
+                                            {copied && copied.startsWith('@') ? 'COPIED' : 'COPY'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-4 mb-12">

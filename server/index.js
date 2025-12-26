@@ -876,7 +876,7 @@ app.get('/api/dev-fund-status', (req, res) => {
 });
 
 app.get('/api/version', (req, res) => {
-    res.json({ version: '1.13', timestamp: new Date().toISOString() });
+    res.json({ version: '1.14', timestamp: new Date().toISOString() });
 });
 
 // ADMIN: Temporary Batch DNS Sync Trigger

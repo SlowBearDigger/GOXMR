@@ -130,6 +130,31 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                             >
                                 <RefreshCw size={12} /> Sync Status
                             </button>
+                            <button
+                                onClick={async () => {
+                                    const btn = document.getElementById('force-scan-btn');
+                                    if (btn) {
+                                        btn.innerHTML = 'SCANNING BLOCKCHAIN...';
+                                        btn.setAttribute('disabled', 'true');
+                                    }
+                                    try {
+                                        const token = localStorage.getItem('goxmr_token');
+                                        await fetch('/api/me/premium/check', {
+                                            method: 'POST',
+                                            headers: { 'Authorization': `Bearer ${token}` }
+                                        });
+                                        if (onRefresh) onRefresh();
+                                    } catch (e) { console.error(e); }
+                                    if (btn) {
+                                        btn.innerHTML = 'FORCE PAYMENT SCAN';
+                                        btn.removeAttribute('disabled');
+                                    }
+                                }}
+                                id="force-scan-btn"
+                                className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-black dark:bg-white text-white dark:text-black font-mono text-[10px] font-black uppercase hover:bg-monero-orange dark:hover:bg-monero-orange hover:text-white transition-colors"
+                            >
+                                <Zap size={12} /> FORCE PAYMENT SCAN
+                            </button>
                         </div>
                     </div>
                 ) : (

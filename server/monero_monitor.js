@@ -77,7 +77,15 @@ class MoneroMonitor {
         // Periodic Sync & Payment Check
         this.sync();
         setInterval(() => this.sync(), 2 * 60 * 1000); // Sync balance every 2m
+        setInterval(() => this.sync(), 2 * 60 * 1000); // Sync balance every 2m
         setInterval(() => this.checkPremiumPayments(), 2 * 60 * 1000); // Check payments every 2m
+    }
+
+    async forceCheck() {
+        console.log('[MONERO] Force check requested.');
+        await this.sync();
+        await this.checkPremiumPayments();
+        return this.getStatus();
     }
 
     async sync() {

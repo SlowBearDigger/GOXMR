@@ -28,7 +28,25 @@ if (!ALTCHA_HMAC_KEY) {
 // ----------------------------------------
 const moneroMonitor = require('./monero_monitor');
 
-// Debug Env Vars
+// Force Manual Payment Check
+app.post('/api/me/premium/check', authenticateToken, async (req, res) => {
+    try {
+        console.log(`[PREMIUM] Manual check requested by ${req.user.username}`);
+        await moneroMonitor.forceCheck();
+
+        // Re-fetch user status
+        const user = await dbGet('SELECT is_premium FROM users WHERE id = ?', [req.user.userId]);
+        res.json({
+            success: true,
+            isPremium: !!user.is_premium,
+            message: user.is_premium ? 'Premium status confirmed!' : 'No confirmed payment found yet. Scanning...'
+        });
+    } catch (err) {
+        console.error('Manual Premium Check Error:', err);
+        res.status(500).json({ error: 'Manual check failed' });
+    }
+});
+
 console.log('--- ENV DEBUG ---');
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('MONERO_WALLET_ADDRESS exists:', !!process.env.MONERO_WALLET_ADDRESS);
@@ -660,11 +678,18 @@ app.get('/api/resolve/signal/:code', async (req, res) => {
     try {
         const { code } = req.params;
         const { password } = req.query;
+        console.log(`[RESOLVER] Resolving code: ${code}`);
 
-        const signal = await dbGet('SELECT * FROM signals WHERE short_code = ? AND is_active = 1', [code]);
-        if (!signal) return res.status(404).json({ error: 'Signal not found' });
+        const signal = await dbGet('SELECT * FROM signals WHERE short_code = ? COLLATE NOCASE AND is_active = 1', [code]);
+        if (!signal) {
+            console.log(`[RESOLVER] Signal not found (or inactive) for code: ${code}`);
+            return res.status(404).json({ error: 'Signal not found' });
+        }
+
+        console.log(`[RESOLVER] Found key: ${signal.short_code}, Expires: ${signal.expires_at}, Now: ${new Date().toISOString()}`);
 
         if (signal.expires_at && new Date(signal.expires_at) < new Date()) {
+            console.warn(`[RESOLVER] Expired key hit: ${code}`);
             await dbRun('UPDATE signals SET is_active = 0 WHERE id = ?', [signal.id]);
             return res.status(410).json({ error: 'Signal expired' });
         }

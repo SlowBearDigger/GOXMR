@@ -76,7 +76,7 @@ app.use(helmet({
             "style-src": ["'self'", "'unsafe-inline'"],
             "font-src": ["'self'", "data:"],
             "img-src": ["'self'", "data:", "blob:", "https://goxmr.click", "https://upload.wikimedia.org", "https://assets.coingecko.com", "https://www.getmonero.org"],
-            "connect-src": ["'self'", "https://api.coingecko.com"]
+            "connect-src": ["'self'", "blob:", "https://api.coingecko.com"]
         }
     }
 }));

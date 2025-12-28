@@ -314,6 +314,88 @@ class MoneroMonitor {
         return { found: true, valid: true };
     }
 
+    // DEBUG METHOD: Returns raw inspection of the transfer object
+    async debugCheck(userId, txidInput) {
+        if (!this.wallet) return { error: "Wallet not initialized" };
+        const targetTxid = txidInput.trim();
+        const logs = [];
+        const log = (msg) => logs.push(msg);
+
+        log(`Checking TXID: ${targetTxid} for userId: ${userId}`);
+
+        try {
+            // Get user index
+            const user = await new Promise((res, rej) => {
+                db.get('SELECT premium_subaddress_index FROM users WHERE id = ?', [userId], (err, row) => {
+                    if (err) rej(err); else res(row);
+                });
+            });
+
+            if (!user) { return { logs, error: "User not found" }; }
+
+            const transfers = await this.wallet.getTransfers({
+                accountIndex: 0,
+                subaddressIndex: user.premium_subaddress_index,
+                isIncoming: true
+            });
+
+            log(`Found ${transfers.length} transfers.`);
+
+            // Try to find match using any means
+            const match = transfers.find(t => {
+                // Try various ID accessors
+                let id = 'unknown';
+                if (typeof t.getTxHash === 'function') id = t.getTxHash();
+                else if (typeof t.getHash === 'function') id = t.getHash();
+                else if (t.getTx && typeof t.getTx === 'function') {
+                    const tx = t.getTx();
+                    if (tx && typeof tx.getHash === 'function') id = tx.getHash();
+                }
+                return id === targetTxid;
+            });
+
+            if (!match) {
+                log("No matching TXID found.");
+                log("Available IDs in wallet:");
+                transfers.forEach(t => {
+                    let id = 'unknown';
+                    if (typeof t.getTxHash === 'function') id = t.getTxHash();
+                    else if (typeof t.getHash === 'function') id = t.getHash();
+                    log(`- ${id}`);
+                });
+                return { logs, found: false };
+            }
+
+            log("MATCH FOUND. Inspecting object...");
+            log(`Keys: ${Object.keys(match).join(', ')}`);
+
+            const methods = ['getHeight', 'getBlockHeight', 'getNumConfirmations', 'getConfirmations', 'isConfirmed', 'getAmount'];
+            const results = {};
+
+            for (const m of methods) {
+                if (typeof match[m] === 'function') {
+                    try {
+                        results[m] = match[m]();
+                    } catch (e) { results[m] = "ERROR: " + e.message; }
+                } else {
+                    results[m] = "NOT A FUNCTION";
+                    // Check if property
+                    if (match[m] !== undefined) results[m] = match[m] + " (property)";
+                }
+            }
+
+            // Explicit property check
+            results['height_prop'] = match.height;
+            results['blockHeight_prop'] = match.blockHeight;
+            results['numConfirmations_prop'] = match.numConfirmations;
+
+            return { logs, found: true, inspection: results };
+
+        } catch (e) {
+            return { logs, error: e.message, stack: e.stack };
+        }
+    }
+
     getStatus() {
         return {
             balance: this.lastBalance,

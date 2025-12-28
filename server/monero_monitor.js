@@ -45,6 +45,7 @@ class MoneroMonitor {
             const walletExists = fs.existsSync(this.walletPath) || fs.existsSync(this.walletPath + '.keys');
 
             if (walletExists) {
+                console.log(`[MONERO] Opening existing wallet at ${this.walletPath}`);
                 this.wallet = await monerojs.openWalletFull({
                     path: this.walletPath,
                     password: 'super_secret_local_password',
@@ -52,6 +53,10 @@ class MoneroMonitor {
                 });
                 await this.wallet.setDaemonConnection(daemonUrl);
             } else {
+                console.log(`[MONERO] Creating new wallet at ${this.walletPath}`);
+                const restoreHeight = Number(process.env.MONERO_RESTORE_HEIGHT) || 3300000; // Default to ~2024
+                console.log(`[MONERO] Using Restore Height: ${restoreHeight}`);
+
                 this.wallet = await monerojs.createWalletFull({
                     path: this.walletPath,
                     password: 'super_secret_local_password',
@@ -59,9 +64,12 @@ class MoneroMonitor {
                     serverUri: daemonUrl,
                     primaryAddress: address,
                     privateViewKey: viewKey,
-                    restoreHeight: Number(process.env.MONERO_RESTORE_HEIGHT) || 3572608
+                    restoreHeight: restoreHeight
                 });
             }
+
+            const primaryAddr = await this.wallet.getPrimaryAddress();
+            console.log(`[MONERO] Wallet Initialized. Primary Address: ${primaryAddr.substring(0, 6)}...${primaryAddr.substring(primaryAddr.length - 6)}`);
 
             console.log('[MONERO] Wallet loaded. Starting background tasks...');
             this.statusMessage = 'Synced';
@@ -97,7 +105,9 @@ class MoneroMonitor {
             const balanceBig = await this.wallet.getBalance();
             this.lastBalance = parseFloat(balanceBig.toString()) / 1e12;
             this.lastHeight = await this.wallet.getHeight();
-            console.log(`[MONERO] Sync Complete. Balance: ${this.lastBalance} XMR`);
+            // Get Daemon Height to compare
+            const daemonHeight = await this.wallet.getDaemonHeight();
+            console.log(`[MONERO] Sync Complete. Balance: ${this.lastBalance} XMR. Height: ${this.lastHeight} / ${daemonHeight}`);
         } catch (err) {
             console.error('[MONERO] Sync Error:', err);
         } finally {
@@ -134,6 +144,7 @@ class MoneroMonitor {
 
         // 3. Generate subaddress from wallet (Account 0, Index N)
         const subaddress = await this.wallet.getSubaddress(0, index);
+        console.log(`[MONERO] Assigned subaddress index ${index} to user ${userId}: ${subaddress.getAddress().substring(0, 8)}...`);
         return subaddress.getAddress();
     }
 
@@ -150,6 +161,7 @@ class MoneroMonitor {
             });
 
             if (pendingUsers.length === 0) return;
+            console.log(`[MONERO] Scanning for ${pendingUsers.length} pending users...`);
 
             // Simple check: Any transfer to the specific subaddress index with confirmations >= 1
             for (const user of pendingUsers) {
@@ -159,9 +171,13 @@ class MoneroMonitor {
                     isIncoming: true
                 });
 
+                console.log(`[MONERO] User ${user.id} (Index ${user.premium_subaddress_index}): Found ${transfers.length} transfers.`);
+
                 const confirmedTransfer = transfers.find(t => {
                     try {
                         const confs = t.getNumConfirmations();
+                        const amount = t.getAmount().toString();
+                        console.log(`   -> Tx: ${t.getTxHash()}, Confs: ${confs}, Amount: ${amount}`);
                         return confs !== undefined && confs >= 1;
                     } catch (e) {
                         return false;

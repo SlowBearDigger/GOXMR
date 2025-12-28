@@ -179,7 +179,7 @@ class MoneroMonitor {
                         const amountStr = t.getAmount().toString();
                         const amountXmr = parseFloat(amountStr) / 1e12;
 
-                        console.log(`   -> Tx: ${t.getTxHash()}, Confs: ${confs}, Amount: ${amountXmr} XMR`);
+                        console.log(`   -> Tx: ${this._getTxHash(t)}, Confs: ${confs}, Amount: ${amountXmr} XMR`);
 
                         // FIX: Verify amount is at least 0.001 XMR to prevent dust attacks
                         return confs !== undefined && confs >= 1 && amountXmr >= MIN_PAYMENT_AMOUNT;
@@ -198,6 +198,17 @@ class MoneroMonitor {
         } catch (err) {
             console.error('[MONERO] Payment Check Error:', err);
         }
+    }
+
+    // Helper to accept different monero-ts transfer object structures
+    _getTxHash(t) {
+        if (typeof t.getTxHash === 'function') return t.getTxHash();
+        if (typeof t.getHash === 'function') return t.getHash();
+        if (t.getTx && typeof t.getTx === 'function') {
+            const tx = t.getTx();
+            if (tx && typeof tx.getHash === 'function') return tx.getHash();
+        }
+        return 'unknown_hash';
     }
 
     async checkPaymentByTxid(userId, txidInput) {
@@ -224,10 +235,14 @@ class MoneroMonitor {
         });
 
         // 3. Find match
-        const match = transfers.find(t => t.getTxHash() === txid);
+        const match = transfers.find(t => this._getTxHash(t) === txid);
 
         if (!match) {
             console.log(`[MONERO] TXID ${txid} not found in user history.`);
+            // Debugging: Log what we DID find
+            if (transfers.length > 0) {
+                console.log(`[MONERO] Available transfers for User ${userId}:`, transfers.map(t => this._getTxHash(t)));
+            }
             return { found: false };
         }
 

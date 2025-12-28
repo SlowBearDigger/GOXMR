@@ -20,9 +20,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
     const [isToolsOpen, setIsToolsOpen] = useState(false);
 
     const handleNavClick = (section: 'home' | 'learn' | 'guide' | 'tools') => {
-        if (isLoggedIn && section === 'home') {
-            window.location.href = '/dashboard';
-        } else if (onNavigate) {
+        if (onNavigate) {
             onNavigate(section);
             window.history.pushState(null, '', '/'); // Ensure URL stays clean
         } else {
@@ -34,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
         { name: 'Home', section: 'home' as const },
         { name: 'Learn', section: 'learn' as const },
         { name: 'Guide', section: 'guide' as const },
+        { name: 'Tools', section: 'tools' as const },
     ];
 
     return (
@@ -72,41 +71,18 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
                                 {item.name}
                             </button>
                         ))}
-
-                        {/* Tools Dropdown */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setIsToolsOpen(!isToolsOpen)}
-                                onMouseEnter={() => setIsToolsOpen(true)}
-                                className={`flex items-center gap-1 font-mono font-bold text-sm tracking-tight uppercase transition-colors ${activeSection === 'tools' ? 'text-monero-orange' : 'hover:text-monero-orange dark:text-white'
-                                    }`}
-                            >
-                                Tools <ChevronDown size={14} className={`transition-transform ${isToolsOpen ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {isToolsOpen && (
-                                <div
-                                    className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] py-2 z-[60]"
-                                    onMouseLeave={() => setIsToolsOpen(false)}
-                                >
-                                    <button
-                                        onClick={() => handleNavClick('tools')}
-                                        className="w-full text-left px-4 py-2 hover:bg-monero-orange hover:text-white font-mono font-bold text-xs uppercase flex items-center gap-2 dark:text-white dark:hover:text-white"
-                                    >
-                                        <QrCode size={14} /> QR Foundry
-                                    </button>
-                                    <div className="px-4 py-2 border-t border-black/10 dark:border-white/10 mt-1">
-                                        <span className="text-[8px] font-black uppercase opacity-30 dark:text-white">More tools pending...</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                     </div>
 
                     {/* Auth Buttons */}
                     <div className="flex items-center gap-2">
                         {isLoggedIn ? (
                             <div className="flex items-center gap-2">
+                                <a
+                                    href="/dashboard"
+                                    className="hidden sm:flex bg-black dark:bg-white text-white dark:text-black font-mono font-bold text-[10px] px-3 py-2 border-2 border-black dark:border-white hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-all uppercase items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] hover:translate-y-1 hover:shadow-none"
+                                >
+                                    COMMAND CENTER
+                                </a>
                                 <a
                                     href={`/${username}`}
                                     className="hidden sm:flex bg-monero-orange text-white font-mono font-bold text-[10px] px-3 py-2 border-2 border-black dark:border-white hover:bg-black dark:hover:bg-white dark:hover:text-black transition-all uppercase items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] hover:translate-y-1 hover:shadow-none"
@@ -176,15 +152,6 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
                                 {item.name}
                             </button>
                         ))}
-                        <button
-                            onClick={() => { handleNavClick('tools'); setIsMenuOpen(false); }}
-                            className={`w-full border-2 border-black dark:border-white p-4 font-mono font-bold uppercase transition-all active:translate-x-1 text-center ${activeSection === 'tools'
-                                ? 'bg-monero-orange text-white'
-                                : 'hover:bg-monero-orange hover:text-white dark:text-white'
-                                }`}
-                        >
-                            Tools (QR Foundry)
-                        </button>
                     </div>
 
                     <div className="h-[2px] bg-black dark:bg-white opacity-10 my-2" />

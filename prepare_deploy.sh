@@ -33,7 +33,8 @@ cat > $DEPLOY_DIR/.env << EOL
 NODE_ENV=production
 PORT=3000
 # JWT_SECRET=  <-- Add this in cPanel
-# MONERO_WALLET_RPC_URL= <-- Add this in cPanel
+# MONERO_WALLET_ADDRESS= <-- Add this in cPanel
+# MONERO_VIEW_KEY= <-- Add this in cPanel
 EOL
 
 # 4. Copy Frontend Build

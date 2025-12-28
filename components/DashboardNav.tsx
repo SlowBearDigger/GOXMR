@@ -8,11 +8,12 @@ interface DashboardNavProps {
 }
 const NAV_ITEMS = [
     { id: 'identity', label: '01_IDENTITY', status: 'OK' },
-    { id: 'signals', label: '02_SIGNALS', status: 'OK' },
+    { id: 'profile-links', label: '02_PROFILE_LINKS', status: 'OK' },
     { id: 'treasury', label: '03_TREASURY', status: 'OK' },
-    { id: 'qr-foundry', label: '04_QR_FOUNDRY', status: 'ACTIVE' },
-    { id: 'design', label: '05_DESIGN_STUDIO', status: 'READY' },
-    { id: 'settings', label: '06_SECURITY_&_OPS', status: 'READY' },
+    { id: 'assets', label: '04_CRYPTO_ASSETS', status: 'NEW' },
+    { id: 'qr-foundry', label: '05_QR_FOUNDRY', status: 'ACTIVE' },
+    { id: 'design', label: '06_DESIGN_STUDIO', status: 'READY' },
+    { id: 'settings', label: '07_SECURITY_&_OPS', status: 'READY' },
 ];
 export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDeploying, onDeploy, isSuccess: deployed }) => {
     const scrollToSection = (id: string) => {

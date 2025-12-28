@@ -3,6 +3,7 @@ import { Key, Shield, ArrowRight, Usb, Loader2, CheckCircle2, Cpu, Lock, AlertCi
 import { startAuthentication } from '@simplewebauthn/browser';
 import * as openpgp from 'openpgp';
 import { Modal } from './Modal';
+import { AltchaWidget } from './AltchaWidget';
 const InputGroup = ({ label, type = "text", placeholder }) => (
     <div className="flex flex-col gap-1 mb-4">
         <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400">{label}</label>
@@ -39,6 +40,7 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
     const [usePgp, setUsePgp] = useState(false);
     const [pgpPublicKey, setPgpPublicKey] = useState('');
     const [pgpError, setPgpError] = useState('');
+    const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
     const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({
         isOpen: false,
         title: '',
@@ -105,7 +107,8 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
                     username,
                     password: usePgp ? null : password,
                     recovery_password: recoveryPassword,
-                    pgp_public_key: usePgp ? pgpPublicKey : null
+                    pgp_public_key: usePgp ? pgpPublicKey : null,
+                    altcha: altchaPayload
                 })
             });
             let data;
@@ -266,9 +269,12 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
                     />
                 </div>
             </div>
+
+            <AltchaWidget onVerify={setAltchaPayload} />
+
             <button
                 onClick={handleRegister}
-                disabled={isAvailable !== true || isChecking || !username || (usePgp ? (!pgpPublicKey || !!pgpError) : !password) || status === 'registering'}
+                disabled={isAvailable !== true || isChecking || !username || (usePgp ? (!pgpPublicKey || !!pgpError) : !password) || status === 'registering' || !altchaPayload}
                 className={`w-full font-bold py-3 uppercase transition-colors flex justify-center items-center gap-2 ${isAvailable !== true || isChecking || !username || (usePgp ? (!pgpPublicKey || !!pgpError) : !password) || status === 'registering' ? 'bg-gray-300 dark:bg-zinc-800 cursor-not-allowed text-gray-500 dark:text-zinc-600' : 'bg-black dark:bg-white text-white dark:text-black hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white'
                     }`}
             >
@@ -296,6 +302,7 @@ export const LoginForm = ({ onSuccess }) => {
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
     const [pgpChallenge, setPgpChallenge] = useState('');
     const [pgpSignature, setPgpSignature] = useState('');
+    const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState('idle');
     const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({
         isOpen: false,
@@ -313,7 +320,7 @@ export const LoginForm = ({ onSuccess }) => {
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, password, altcha: altchaPayload })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Login failed');
@@ -670,7 +677,10 @@ export const LoginForm = ({ onSuccess }) => {
                     Forgot Password?
                 </button>
             </div>
-            <button onClick={() => handleLogin('standard')} className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-3 uppercase hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-colors flex justify-center items-center gap-2 mb-3">
+
+            <AltchaWidget onVerify={setAltchaPayload} />
+
+            <button onClick={() => handleLogin('standard')} disabled={!altchaPayload || status === 'authenticating'} className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-3 uppercase hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-colors flex justify-center items-center gap-2 mb-3 disabled:opacity-50 disabled:cursor-not-allowed">
                 Login <ArrowRight size={16} />
             </button>
             <div className="relative flex py-2 items-center">
@@ -684,6 +694,6 @@ export const LoginForm = ({ onSuccess }) => {
             <button onClick={() => handleLogin('pgp_challenge')} className="w-full border-2 border-monero-orange font-bold py-2 uppercase hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors flex justify-center items-center gap-2 text-xs text-monero-orange">
                 <Shield size={14} /> PGP Identity
             </button>
-        </div>
+        </div >
     );
 };

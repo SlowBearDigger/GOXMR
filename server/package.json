@@ -9,6 +9,7 @@
     },
     "dependencies": {
         "@simplewebauthn/server": "^13.2.2",
+        "altcha-lib": "^1.4.1",
         "axios": "^1.13.2",
         "bcrypt": "^5.1.1",
         "cors": "^2.8.5",

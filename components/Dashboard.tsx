@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music } from 'lucide-react';
+import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music, Lock } from 'lucide-react';
 import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
 import { DashboardNav } from './DashboardNav';
+import { PremiumUpgradeCard } from './PremiumUpgradeCard';
 import type { Link, Wallet } from '../types.ts';
 const INITIAL_LINKS: Link[] = [];
 const INITIAL_WALLETS: Wallet[] = [];
@@ -101,6 +102,43 @@ export const Dashboard: React.FC = () => {
     const [pgpKey, setPgpKey] = useState('');
     const [handleConfig, setHandleConfig] = useState<{ enabled_currencies: string[] }>({ enabled_currencies: ['XMR'] });
     const [musicUrl, setMusicUrl] = useState<string | null>(null);
+    const [isPremium, setIsPremium] = useState(false);
+    const [premiumSubaddress, setPremiumSubaddress] = useState('');
+    const [premiumActivatedAt, setPremiumActivatedAt] = useState<string | null>(null);
+    const [userSignals, setUserSignals] = useState<any[]>([]);
+    const [userDrops, setUserDrops] = useState<any[]>([]);
+
+    const fetchUserContent = async () => {
+        const token = localStorage.getItem('goxmr_token');
+        if (!token) return;
+        try {
+            const [sigRes, dropRes] = await Promise.all([
+                fetch('/api/me/signals', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/me/drops', { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+            if (sigRes.ok) setUserSignals(await sigRes.json());
+            if (dropRes.ok) setUserDrops(await dropRes.json());
+        } catch (e) { console.error(e); }
+    };
+
+    const deleteSignal = async (id: number) => {
+        const token = localStorage.getItem('goxmr_token');
+        await fetch(`/api/me/signals/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        fetchUserContent();
+    };
+
+    const deleteDrop = async (id: number) => {
+        const token = localStorage.getItem('goxmr_token');
+        await fetch(`/api/me/drops/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        fetchUserContent();
+    };
+
     const fileInputRefProfile = React.useRef<HTMLInputElement>(null);
     const fileInputRefBanner = React.useRef<HTMLInputElement>(null);
     const fileInputRefMusic = React.useRef<HTMLInputElement>(null);
@@ -123,6 +161,7 @@ export const Dashboard: React.FC = () => {
         barColor: '#F97316',
         useVisualizer: true,
     });
+
     const fetchProfile = async () => {
         const token = localStorage.getItem('goxmr_token');
         if (!token) return;
@@ -142,6 +181,8 @@ export const Dashboard: React.FC = () => {
                 if (data.wallets) setWallets(data.wallets);
                 setHasRecovery(!!data.hasRecovery);
                 setHasPgp(!!data.hasPgp);
+                setIsPremium(!!data.isPremium);
+                if (data.premiumActivatedAt) setPremiumActivatedAt(data.premiumActivatedAt);
                 if (data.pgp_public_key) setPgpKey(data.pgp_public_key);
                 if (data.handle_config) setHandleConfig(data.handle_config);
                 if (data.design) {
@@ -157,25 +198,46 @@ export const Dashboard: React.FC = () => {
                         setQrDesign(prev => ({
                             ...prev,
                             ...data.design.qrDesign,
-                            // Ensure ID is a number if it exists
                             selectedWalletId: data.design.qrDesign.selectedWalletId ? Number(data.design.qrDesign.selectedWalletId) : null,
                             content: data.design.qrDesign.content || '',
                             selectedCrypto: data.design.qrDesign.selectedCrypto || 'monero'
                         }));
                     }
                     if (data.design.sonicDesign) {
-                        setSonicDesign(prev => ({
-                            ...prev,
-                            ...data.design.sonicDesign
-                        }));
+                        setSonicDesign(prev => ({ ...prev, ...data.design.sonicDesign }));
                     }
                     localStorage.setItem('goxmr_design', JSON.stringify(data.design));
                 }
             }
-        } catch (error) {
-            console.error("Failed to fetch profile", error);
+        } catch (error) { console.error("Failed to fetch profile", error); }
+    };
+
+    const fetchPremiumStatus = async () => {
+        const token = localStorage.getItem('goxmr_token');
+        if (!token) return;
+        try {
+            const res = await fetch('/api/me/premium', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setIsPremium(data.isPremium);
+                setPremiumSubaddress(data.subaddress);
+                if (data.activatedAt) setPremiumActivatedAt(data.activatedAt);
+            }
+        } catch (e) {
+            console.error(e);
         }
     };
+
+    useEffect(() => {
+        const init = async () => {
+            await fetchProfile();
+            await fetchPremiumStatus();
+            await fetchUserContent();
+        };
+        init();
+    }, []);
     const [isDeploying, setIsDeploying] = useState(false);
     const [isDeploySuccess, setIsDeploySuccess] = useState(false);
     const handleDeploy = async () => {
@@ -310,6 +372,7 @@ export const Dashboard: React.FC = () => {
     };
     useEffect(() => {
         fetchProfile();
+        fetchPremiumStatus();
         const saved = localStorage.getItem('goxmr_design');
         if (saved) {
             const parsed = JSON.parse(saved);
@@ -601,10 +664,10 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </section>
 
-                    <section id="signals" className="scroll-mt-32 w-full">
+                    <section id="profile-links" className="scroll-mt-32 w-full">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
                             <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
-                                <span>Signals (Links)</span>
+                                <span>Social & Profile Links</span>
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             </div>
                             <div className="p-4 flex-1 flex flex-col gap-3 overflow-y-auto max-h-[600px]">
@@ -646,43 +709,139 @@ export const Dashboard: React.FC = () => {
                                 <span>Treasury (Wallets)</span>
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             </div>
-                            <div className="p-4 flex-1 flex flex-col gap-3">
-                                {wallets.map(wallet => (
-                                    <div key={wallet.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex flex-col gap-2 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all">
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex items-center gap-2">
-                                                {wallet.currency === 'XMR' ?
-                                                    <div className="w-5 h-5 bg-monero-orange rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">M</div> :
-                                                    <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">B</div>
-                                                }
+                            <div className="p-4 flex-1 flex flex-col gap-6">
+                                { }
+                                <PremiumUpgradeCard
+                                    isPremium={isPremium}
+                                    premiumSubaddress={premiumSubaddress}
+                                    premiumActivatedAt={premiumActivatedAt}
+                                    onRefresh={fetchPremiumStatus}
+                                />
+
+                                <div className="space-y-3">
+                                    {wallets.map(wallet => (
+                                        <div key={wallet.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex flex-col gap-2 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    {wallet.currency === 'XMR' ?
+                                                        <div className="w-5 h-5 bg-monero-orange rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">M</div> :
+                                                        <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">B</div>
+                                                    }
+                                                    <input
+                                                        type="text"
+                                                        value={wallet.label}
+                                                        onChange={(e) => updateWallet(wallet.id, { label: e.target.value })}
+                                                        className="font-mono text-xs font-bold bg-transparent outline-none dark:text-white"
+                                                    />
+                                                </div>
+                                                <button onClick={() => removeWallet(wallet.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                                    <WalletIcon size={10} className="text-gray-400" />
+                                                </div>
                                                 <input
                                                     type="text"
-                                                    value={wallet.label}
-                                                    onChange={(e) => updateWallet(wallet.id, { label: e.target.value })}
-                                                    className="font-mono text-xs font-bold bg-transparent outline-none dark:text-white"
+                                                    value={wallet.address}
+                                                    onChange={(e) => updateWallet(wallet.id, { address: e.target.value })}
+                                                    placeholder="Paste Address"
+                                                    className="w-full pl-6 pr-2 py-1 font-mono text-[10px] bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 focus:border-black dark:focus:border-white outline-none dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                                                 />
                                             </div>
-                                            <button onClick={() => removeWallet(wallet.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Trash2 size={12} />
-                                            </button>
                                         </div>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                                                <WalletIcon size={10} className="text-gray-400" />
+                                    ))}
+                                    <button onClick={addWallet} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
+                                        <Plus size={14} /> ADD WALLET
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="assets" className="scroll-mt-32 w-full">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                                <span>Cryptographic Assets (Signals & Drops)</span>
+                                <div className="flex gap-2 items-center">
+                                    <Shield size={10} className="text-monero-orange" />
+                                    <span className="text-[8px] opacity-60">SOVEREIGN_STORAGE</span>
+                                </div>
+                            </div>
+                            <div className="p-4 flex-1 space-y-8">
+                                {/* Signals Manager */}
+                                <div>
+                                    <h4 className="font-mono font-black text-[10px] uppercase mb-4 flex items-center gap-2 dark:text-white">
+                                        <LinkIcon size={12} className="text-monero-orange" /> Active Signals
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {userSignals.length === 0 ? (
+                                            <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
+                                                <p className="font-mono text-[9px] text-gray-400 uppercase">No active signals detected</p>
                                             </div>
-                                            <input
-                                                type="text"
-                                                value={wallet.address}
-                                                onChange={(e) => updateWallet(wallet.id, { address: e.target.value })}
-                                                placeholder="Paste Address"
-                                                className="w-full pl-6 pr-2 py-1 font-mono text-[10px] bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 focus:border-black dark:focus:border-white outline-none dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                                            />
-                                        </div>
+                                        ) : (
+                                            userSignals.map(sig => (
+                                                <div key={sig.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
+                                                    <div className="overflow-hidden">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="bg-monero-orange text-white text-[8px] font-black px-1 uppercase tracking-tighter">SIG_{sig.short_code}</span>
+                                                            <span className="text-[9px] font-mono font-bold dark:text-white truncate max-w-[150px]">{sig.original_url}</span>
+                                                        </div>
+                                                        <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase underline">
+                                                            <span>Hits: {sig.visit_count}</span>
+                                                            <span>Created: {new Date(sig.created_at).toLocaleDateString()}</span>
+                                                            {sig.expires_at && <span className="text-yellow-500">Expires: {new Date(sig.expires_at).toLocaleDateString()}</span>}
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => deleteSignal(sig.id)} className="text-gray-400 hover:text-red-500 p-1 opacity-100 transition-opacity">
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
-                                ))}
-                                <button onClick={addWallet} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
-                                    <Plus size={14} /> ADD WALLET
-                                </button>
+                                </div>
+
+                                {/* Drops Manager */}
+                                <div>
+                                    <h4 className="font-mono font-black text-[10px] uppercase mb-4 flex items-center gap-2 dark:text-white">
+                                        <Lock size={12} className="text-monero-orange" /> Dead Drops
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {userDrops.length === 0 ? (
+                                            <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
+                                                <p className="font-mono text-[9px] text-gray-400 uppercase">No dead drops in vault</p>
+                                            </div>
+                                        ) : (
+                                            userDrops.map(drop => (
+                                                <div key={drop.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="bg-black dark:bg-white text-white dark:text-black text-[8px] font-black px-1 uppercase tracking-tighter">DROP_{drop.drop_code}</span>
+                                                            <span className="text-[9px] font-mono font-bold dark:text-white uppercase">{drop.encryption_method} ENCRYPTION</span>
+                                                        </div>
+                                                        <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase">
+                                                            <span>Created: {new Date(drop.created_at).toLocaleDateString()}</span>
+                                                            {drop.burn_after_read === 1 && <span className="text-red-500 font-black">BURN_AFTER_READ</span>}
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => deleteDrop(drop.id)} className="text-gray-400 hover:text-red-500 p-1 opacity-100 transition-opacity">
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {!isPremium && (
+                                    <div className="bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-yellow-500 p-3">
+                                        <p className="text-[10px] font-bold dark:text-yellow-500 uppercase leading-tight">
+                                            Sovereign Privacy Advisory: Non-premium assets have limited retention. Upgrade to premium for permanent archival control.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </section>

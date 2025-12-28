@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.2.2",
+    "altcha": "^2.3.0",
+    "altcha-lib": "^1.4.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.4",
     "lucide-react": "^0.562.0",

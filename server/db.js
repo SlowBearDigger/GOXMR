@@ -33,7 +33,10 @@ const initDb = () => {
             `ALTER TABLE users ADD COLUMN design_config TEXT`,
             `ALTER TABLE users ADD COLUMN pgp_public_key TEXT`,
             `ALTER TABLE users ADD COLUMN handle_config TEXT`,
-            `ALTER TABLE users ADD COLUMN music_url TEXT`
+            `ALTER TABLE users ADD COLUMN music_url TEXT`,
+            `ALTER TABLE users ADD COLUMN premium_subaddress_index INTEGER`,
+            `ALTER TABLE users ADD COLUMN is_premium BOOLEAN DEFAULT 0`,
+            `ALTER TABLE users ADD COLUMN premium_activated_at DATETIME`
         ];
 
         migrations.forEach(sql => {
@@ -87,6 +90,40 @@ const initDb = () => {
         });
         db.run(`ALTER TABLE authenticators ADD COLUMN attachment TEXT`, (err) => {
         });
+
+        // --- SIGNALS & DROPS ---
+        db.run(`
+            CREATE TABLE IF NOT EXISTS signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                short_code TEXT UNIQUE NOT NULL,
+                original_url TEXT NOT NULL,
+                user_id INTEGER,
+                is_active BOOLEAN DEFAULT 1,
+                visit_count INTEGER DEFAULT 0,
+                password_hash TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        `);
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS drops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                drop_code TEXT UNIQUE NOT NULL,
+                encrypted_content TEXT NOT NULL,
+                user_id INTEGER,
+                is_encrypted BOOLEAN DEFAULT 1,
+                encryption_method TEXT, -- 'AES' or 'PGP'
+                burn_after_read BOOLEAN DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        `);
+
+        db.run(`CREATE INDEX IF NOT EXISTS idx_signals_code ON signals(short_code)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_drops_code ON drops(drop_code)`);
     });
 };
 initDb();

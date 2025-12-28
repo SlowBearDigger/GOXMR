@@ -10,6 +10,8 @@ import { Modal } from './components/Modal';
 import { LoginForm, RegisterForm } from './components/AuthForms';
 import { Guide } from './components/Guide';
 import { LearnMonero } from './components/LearnMonero';
+import { Tools } from './components/Tools';
+import { ResolverPage } from './components/ResolverPage';
 
 const MainLayout: React.FC<{
     isLoggedIn: boolean;
@@ -42,6 +44,15 @@ const MainLayout: React.FC<{
         </div>
     );
 };
+
+const AppLayout: React.FC<{ children: React.ReactNode, theme: string }> = ({ children, theme }) => (
+    <div className={`${theme === 'dark' ? 'dark' : ''} h-full`}>
+        <div className="min-h-screen bg-white transition-colors duration-300 dark:bg-[#000000] text-black dark:text-white font-sans selection:bg-monero-orange selection:text-white relative">
+            <Background />
+            {children}
+        </div>
+    </div>
+);
 
 const App: React.FC = () => {
     const [isLoggedIn, setUserLoggedIn] = useState(false);
@@ -101,21 +112,14 @@ const App: React.FC = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const AppLayout = ({ children }: { children: React.ReactNode }) => (
-        <div className={`${theme === 'dark' ? 'dark' : ''} h-full`}>
-            <div className="min-h-screen bg-white transition-colors duration-300 dark:bg-[#000000] text-black dark:text-white font-sans selection:bg-monero-orange selection:text-white relative">
-                <Background />
-                {children}
-            </div>
-        </div>
-    );
+
 
     return (
         <div className={theme === 'dark' ? 'dark' : ''}>
             <Routes>
                 {/* Routes with Header & Footer and Dark Mode support */}
                 <Route element={
-                    <AppLayout>
+                    <AppLayout theme={theme}>
                         <MainLayout
                             isLoggedIn={isLoggedIn}
                             username={username}
@@ -130,10 +134,15 @@ const App: React.FC = () => {
                     </AppLayout>
                 }>
                     <Route path="/" element={
-                        isLoggedIn ? <Navigate to="/dashboard" /> : <LandingPage onOpenRegister={handleOpenRegister} />
+                        <LandingPage onOpenRegister={handleOpenRegister} />
                     } />
                     <Route path="/dashboard" element={
-                        isLoggedIn ? <Dashboard /> : <Navigate to="/" />
+                        isLoggedIn ? (
+                            activeSection === 'learn' ? <LearnMonero /> :
+                                activeSection === 'guide' ? <Guide /> :
+                                    activeSection === 'tools' ? <Tools /> :
+                                        <Dashboard />
+                        ) : <Navigate to="/" />
                     } />
                 </Route>
 
@@ -143,6 +152,10 @@ const App: React.FC = () => {
                         <PublicProfile />
                     </div>
                 } />
+
+                {/* Signals & Drops Resolvers */}
+                <Route path="/s/:code" element={<ResolverPage mode="signal" />} />
+                <Route path="/d/:code" element={<ResolverPage mode="drop" />} />
             </Routes>
 
             {/* Global Modals - Now inside the theme-controlled div */}

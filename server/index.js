@@ -10,6 +10,23 @@ console.log('📦 Database initialized, checking schema...');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const NodeCache = require('node-cache');
+const { createChallenge, verifySolution } = require('altcha-lib');
+const crypto = require('crypto');
+
+// --- AUTOMATIC ALTCHA KEY MANAGEMENT ---
+let ALTCHA_HMAC_KEY = process.env.ALTCHA_HMAC_KEY;
+if (!ALTCHA_HMAC_KEY) {
+    const keyPath = path.join(__dirname, '.altcha_key');
+    if (fs.existsSync(keyPath)) {
+        ALTCHA_HMAC_KEY = fs.readFileSync(keyPath, 'utf8').trim();
+    } else {
+        ALTCHA_HMAC_KEY = crypto.randomBytes(32).toString('hex');
+        fs.writeFileSync(keyPath, ALTCHA_HMAC_KEY, 'utf8');
+        console.log('🛡️ Auto-generated Altcha HMAC Key and saved to .altcha_key');
+    }
+}
+// ----------------------------------------
+const moneroMonitor = require('./monero_monitor');
 
 // Debug Env Vars
 console.log('--- ENV DEBUG ---');
@@ -53,7 +70,9 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             "default-src": ["'self'"],
-            "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"],
+            "worker-src": ["'self'", "blob:"],
+            "child-src": ["'self'", "blob:"],
             "style-src": ["'self'", "'unsafe-inline'"],
             "font-src": ["'self'", "data:"],
             "img-src": ["'self'", "data:", "blob:", "https://goxmr.click", "https://upload.wikimedia.org", "https://assets.coingecko.com", "https://www.getmonero.org"],
@@ -110,6 +129,38 @@ app.get('/api/health', (req, res) => {
 app.get('/api/ping', (req, res) => {
     res.json({ pong: true, time: new Date().toISOString() });
 });
+
+// ALTCHA CHALLENGE ENDPOINT
+app.get('/api/altcha-challenge', async (req, res) => {
+    try {
+        const challenge = await createChallenge({
+            hmacKey: ALTCHA_HMAC_KEY,
+            maxNumber: 100000, // Reasonable difficulty
+        });
+        res.json(challenge);
+    } catch (err) {
+        console.error('Altcha Challenge Error:', err);
+        res.status(500).json({ error: 'Failed to generate security challenge' });
+    }
+});
+
+// ALTCHA VERIFICATION MIDDLEWARE
+const verifyAltcha = async (req, res, next) => {
+    const { altcha } = req.body;
+    if (!altcha) {
+        return res.status(401).json({ error: 'Security verification required (Captcha missing).' });
+    }
+    try {
+        const isValid = await verifySolution(altcha, ALTCHA_HMAC_KEY);
+        if (!isValid) {
+            return res.status(401).json({ error: 'Security verification failed (Invalid Captcha).' });
+        }
+        next();
+    } catch (err) {
+        console.error('Altcha Verify Error:', err);
+        res.status(500).json({ error: 'Security verification system error.' });
+    }
+};
 app.get('/api/price/xmr', async (req, res) => {
     try {
         const cached = profileCache.get('xmr_price');
@@ -234,7 +285,7 @@ const dbAll = (query, params) => {
 };
 app.get('/api/me', authenticateToken, async (req, res) => {
     try {
-        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, music_url, design_config, handle_config, recovery_hash, pgp_public_key, created_at FROM users WHERE id = ?', [req.user.userId]);
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, music_url, design_config, handle_config, recovery_hash, pgp_public_key, is_premium, premium_activated_at, created_at FROM users WHERE id = ?', [req.user.userId]);
         if (!user) return res.sendStatus(404);
         const { recovery_hash, ...safeUser } = user;
         const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [req.user.userId]);
@@ -244,6 +295,8 @@ app.get('/api/me', authenticateToken, async (req, res) => {
             hasRecovery: !!recovery_hash,
             links,
             wallets,
+            isPremium: !!user.is_premium,
+            premiumActivatedAt: user.premium_activated_at,
             design: user.design_config ? JSON.parse(user.design_config) : null,
             handle_config: user.handle_config ? JSON.parse(user.handle_config) : { enabled_currencies: ['XMR'] },
             hasPgp: !!user.pgp_public_key
@@ -508,7 +561,199 @@ app.post('/api/pgp/verify', async (req, res) => {
     }
 });
 
-app.post('/api/register', authLimiter, botHoneypot, async (req, res) => {
+// --- SIGNALS & DROPS API ---
+
+function generateShortCode(length = 6) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+// Create Signal (URL)
+app.post('/api/tools/signal', verifyAltcha, async (req, res) => {
+    try {
+        const { url, password, customCode, expiresHours } = req.body;
+        const authHeader = req.headers['authorization'];
+        let userId = null;
+
+        if (authHeader) {
+            try {
+                const token = authHeader.split(' ')[1];
+                const decoded = jwt.verify(token, JWT_SECRET);
+                userId = decoded.userId;
+            } catch (e) { }
+        }
+
+        let finalCode = generateShortCode();
+        let expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        let passHash = null;
+
+        if (userId) {
+            // Logged in users can customize
+            if (customCode) {
+                const existing = await dbGet('SELECT id FROM signals WHERE short_code = ?', [customCode]);
+                if (existing) return res.status(400).json({ error: 'Custom alias already taken' });
+                finalCode = customCode;
+            }
+            if (password) {
+                const salt = await bcrypt.genSalt(10);
+                passHash = await bcrypt.hash(password, salt);
+            }
+            if (expiresHours !== undefined) {
+                expiry = expiresHours === 0 ? null : new Date(Date.now() + expiresHours * 60 * 60 * 1000).toISOString();
+            }
+        }
+
+        await dbRun('INSERT INTO signals (short_code, original_url, user_id, password_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
+            [finalCode, url, userId, passHash, expiry]);
+
+        res.json({ shortCode: finalCode, expiresAt: expiry });
+
+    } catch (err) {
+        console.error('Signal Create Error:', err);
+        res.status(500).json({ error: 'Failed to create signal' });
+    }
+});
+
+// Create Drop (Secure Note)
+app.post('/api/tools/drop', verifyAltcha, async (req, res) => {
+    try {
+        const { content, method, burnAfterRead, expiresHours } = req.body;
+        const authHeader = req.headers['authorization'];
+        let userId = null;
+
+        if (authHeader) {
+            try {
+                const token = authHeader.split(' ')[1];
+                const decoded = jwt.verify(token, JWT_SECRET);
+                userId = decoded.userId;
+            } catch (e) { }
+        }
+
+        const dropCode = generateShortCode(8);
+        let expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        let burn = 0;
+
+        if (userId) {
+            if (expiresHours) {
+                expiry = new Date(Date.now() + expiresHours * 60 * 60 * 1000).toISOString();
+            }
+            if (burnAfterRead) burn = 1;
+        }
+
+        await dbRun('INSERT INTO drops (drop_code, encrypted_content, user_id, encryption_method, burn_after_read, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [dropCode, content, userId, method || 'AES', burn, expiry]);
+
+        res.json({ dropCode, expiresAt: expiry });
+
+    } catch (err) {
+        console.error('Drop Create Error:', err);
+        res.status(500).json({ error: 'Failed to create drop' });
+    }
+});
+
+// Resolver for Signals
+app.get('/api/resolve/signal/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const { password } = req.query;
+
+        const signal = await dbGet('SELECT * FROM signals WHERE short_code = ? AND is_active = 1', [code]);
+        if (!signal) return res.status(404).json({ error: 'Signal not found' });
+
+        if (signal.expires_at && new Date(signal.expires_at) < new Date()) {
+            await dbRun('UPDATE signals SET is_active = 0 WHERE id = ?', [signal.id]);
+            return res.status(410).json({ error: 'Signal expired' });
+        }
+
+        if (signal.password_hash) {
+            if (!password) return res.json({ requiresPassword: true });
+            const valid = await bcrypt.compare(password, signal.password_hash);
+            if (!valid) return res.status(401).json({ error: 'Invalid password' });
+        }
+
+        await dbRun('UPDATE signals SET visit_count = visit_count + 1 WHERE id = ?', [signal.id]);
+        res.json({ url: signal.original_url });
+
+    } catch (err) {
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+// Resolver for Drops
+app.get('/api/resolve/drop/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const drop = await dbGet('SELECT * FROM drops WHERE drop_code = ?', [code]);
+
+        if (!drop) return res.status(404).json({ error: 'Drop not found' });
+
+        if (drop.expires_at && new Date(drop.expires_at) < new Date()) {
+            await dbRun('DELETE FROM drops WHERE id = ?', [drop.id]);
+            return res.status(410).json({ error: 'Drop expired' });
+        }
+
+        // Return the encrypted blob
+        res.json({
+            content: drop.encrypted_content,
+            method: drop.encryption_method,
+            burnAfterRead: !!drop.burn_after_read
+        });
+
+        if (drop.burn_after_read) {
+            // Self-destruct after serving
+            await dbRun('DELETE FROM drops WHERE id = ?', [drop.id]);
+        }
+
+    } catch (err) {
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+// --- USER MANAGEMENT ENDPOINTS ---
+
+app.get('/api/me/signals', authenticateToken, async (req, res) => {
+    try {
+        const signals = await dbAll('SELECT id, short_code, original_url, visit_count, created_at, expires_at FROM signals WHERE user_id = ? ORDER BY created_at DESC', [req.user.userId]);
+        res.json(signals);
+    } catch (err) {
+        console.error('Fetch signals error:', err);
+        res.status(500).json({ error: 'Failed to fetch signals' });
+    }
+});
+
+app.delete('/api/me/signals/:id', authenticateToken, async (req, res) => {
+    try {
+        await dbRun('DELETE FROM signals WHERE id = ? AND user_id = ?', [req.params.id, req.user.userId]);
+        res.json({ message: 'Signal deleted' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete signal' });
+    }
+});
+
+app.get('/api/me/drops', authenticateToken, async (req, res) => {
+    try {
+        const drops = await dbAll('SELECT id, drop_code, encryption_method, burn_after_read, created_at, expires_at FROM drops WHERE user_id = ? ORDER BY created_at DESC', [req.user.userId]);
+        res.json(drops);
+    } catch (err) {
+        console.error('Fetch drops error:', err);
+        res.status(500).json({ error: 'Failed to fetch drops' });
+    }
+});
+
+app.delete('/api/me/drops/:id', authenticateToken, async (req, res) => {
+    try {
+        await dbRun('DELETE FROM drops WHERE id = ? AND user_id = ?', [req.params.id, req.user.userId]);
+        res.json({ message: 'Drop deleted' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete drop' });
+    }
+});
+
+app.post('/api/register', authLimiter, botHoneypot, verifyAltcha, async (req, res) => {
     try {
         const { username, password, recovery_password, pgp_public_key } = req.body;
         if (!username || (!password && !pgp_public_key)) {
@@ -539,7 +784,7 @@ app.post('/api/register', authLimiter, botHoneypot, async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
-app.post('/api/login', authLimiter, botHoneypot, async (req, res) => {
+app.post('/api/login', authLimiter, botHoneypot, verifyAltcha, async (req, res) => {
     try {
         console.log('Login Attempt Payload:', req.body);
         const { username, password } = req.body;
@@ -815,6 +1060,21 @@ app.put('/api/me/pgp', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+
+app.get('/api/me/premium', authenticateToken, async (req, res) => {
+    try {
+        const user = await dbGet('SELECT is_premium, premium_subaddress_index, premium_activated_at FROM users WHERE id = ?', [req.user.userId]);
+        const subaddress = await moneroMonitor.getOrCreateSubaddress(req.user.userId);
+        res.json({
+            isPremium: !!user.is_premium,
+            subaddress,
+            activatedAt: user.premium_activated_at
+        });
+    } catch (err) {
+        console.error('Premium Status Error:', err);
+        res.status(500).json({ error: 'Failed to fetch premium status' });
+    }
+});
 app.post('/api/recover-access', botHoneypot, async (req, res) => {
     try {
         const { username, recoveryPassword, newPassword } = req.body;
@@ -996,7 +1256,6 @@ app.put('/api/me/handle', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Server Error' });
     }
 });
-const moneroMonitor = require('./monero_monitor');
 moneroMonitor.init();
 app.get('/api/dev-fund-status', (req, res) => {
     res.json(moneroMonitor.getStatus());

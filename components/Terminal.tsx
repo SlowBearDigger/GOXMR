@@ -82,7 +82,7 @@ export const Terminal: React.FC = () => {
   };
   return (
     <div
-      className="w-full max-w-md border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] p-4 font-mono text-xs md:text-sm relative overflow-hidden h-80 flex flex-col z-20 cursor-text"
+      className="w-full max-w-md border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] p-4 font-mono text-xs md:text-sm relative overflow-hidden h-80 flex flex-col z-20 cursor-text transition-all hover:translate-y-1 hover:shadow-none"
       onClick={() => !isSequencePlaying && inputRef.current?.focus()}
     >
       <div className="flex items-center justify-between border-b-2 border-black dark:border-white pb-2 mb-2 bg-gray-50 dark:bg-zinc-800 -mx-4 -mt-4 px-4 py-2 select-none">

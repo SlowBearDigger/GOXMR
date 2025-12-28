@@ -6,6 +6,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
+console.log('📦 Database initialized, checking schema...');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const NodeCache = require('node-cache');
@@ -17,8 +18,6 @@ console.log('MONERO_WALLET_ADDRESS exists:', !!process.env.MONERO_WALLET_ADDRESS
 console.log('MONERO_VIEW_KEY exists:', !!process.env.MONERO_VIEW_KEY);
 console.log('--- END ENV DEBUG ---');
 const sharp = require('sharp');
-const dnsUtil = require('./cpanel_dns');
-const dnsSync = require('./sync_all_dns');
 const {
     generateRegistrationOptions,
     verifyRegistrationResponse,
@@ -203,15 +202,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 }, // Increased to 10MB for audio, but we'll recommend small files
     fileFilter: (req, file, cb) => {
-        const filetypes = /jpeg|jpg|png|gif|webp/;
+        const filetypes = /jpeg|jpg|png|gif|webp|mpeg|mp3/;
         const items = filetypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = filetypes.test(file.mimetype);
         if (mimetype && items) {
             return cb(null, true);
         }
-        cb(new Error("Error: Images Only!"));
+        cb(new Error("Error: Images or MP3 Only!"));
     }
 });
 app.use('/uploads', express.static('uploads'));
@@ -235,7 +234,7 @@ const dbAll = (query, params) => {
 };
 app.get('/api/me', authenticateToken, async (req, res) => {
     try {
-        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, design_config, recovery_hash, pgp_public_key, created_at FROM users WHERE id = ?', [req.user.userId]);
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, music_url, design_config, handle_config, recovery_hash, pgp_public_key, created_at FROM users WHERE id = ?', [req.user.userId]);
         if (!user) return res.sendStatus(404);
         const { recovery_hash, ...safeUser } = user;
         const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [req.user.userId]);
@@ -246,6 +245,7 @@ app.get('/api/me', authenticateToken, async (req, res) => {
             links,
             wallets,
             design: user.design_config ? JSON.parse(user.design_config) : null,
+            handle_config: user.handle_config ? JSON.parse(user.handle_config) : { enabled_currencies: ['XMR'] },
             hasPgp: !!user.pgp_public_key
         });
     } catch (err) {
@@ -272,28 +272,34 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
                 await dbRun('INSERT INTO links (user_id, type, title, url, icon) VALUES (?, ?, ?, ?, ?)', [userId, l.type, l.title, l.url, l.icon]);
             }
         }
-        await dbRun('DELETE FROM wallets WHERE user_id = ?', [userId]);
+        // Efficient Wallet Update to preserve IDs
+        const existingWallets = await dbAll('SELECT * FROM wallets WHERE user_id = ?', [userId]);
+
         if (wallets && Array.isArray(wallets)) {
             for (const w of wallets) {
-                // Security: Limit address/label length + TRIM whitespace
-                const cleanAddress = w.address?.trim();
-                const cleanLabel = w.label?.trim();
-                if (cleanLabel?.length > 100 || cleanAddress?.length > 200) continue;
-                await dbRun('INSERT INTO wallets (user_id, currency, label, address) VALUES (?, ?, ?, ?)', [userId, w.currency, cleanLabel, cleanAddress]);
+                if (w.label?.length > 100 || w.address?.length > 200) continue;
+
+                // Try to find matching existing wallet to update instead of delete/re-insert
+                const existing = existingWallets.find(ew => ew.currency === w.currency && ew.label === w.label);
+
+                if (existing) {
+                    await dbRun('UPDATE wallets SET address = ? WHERE id = ?', [w.address, existing.id]);
+                    // Remove from list so we know it's handled
+                    const idx = existingWallets.indexOf(existing);
+                    if (idx > -1) existingWallets.splice(idx, 1);
+                } else {
+                    await dbRun('INSERT INTO wallets (user_id, currency, label, address) VALUES (?, ?, ?, ?)', [userId, w.currency, w.label, w.address]);
+                }
             }
         }
 
-        // Automated OpenAlias via Namecheap API
-        const xmrWallet = wallets?.find(w => w.currency === 'XMR');
-        if (xmrWallet && xmrWallet.address) {
-            // Run DNS update in background to not block the response
-            dnsUtil.updateDNS(req.user.username, xmrWallet.address.trim()).catch(err => {
-                console.error('[DNS_AUTO] Failed background update:', err);
-            });
+        // Delete wallets that were NOT in the new list
+        for (const ew of existingWallets) {
+            await dbRun('DELETE FROM wallets WHERE id = ?', [ew.id]);
         }
-
-        profileCache.del(`user:${req.user.username}`);
-        res.json({ message: 'Profile synced' });
+        res.json({ message: 'Dashboard Deployed Successfully' });
+        const user = await dbGet('SELECT username FROM users WHERE id = ?', [userId]);
+        if (user) profileCache.del(`user:${user.username}`);
     } catch (err) {
         console.error('SYNC Error:', err);
         res.status(500).json({ error: 'Sync failed' });
@@ -308,7 +314,7 @@ app.get('/api/user/:username', async (req, res) => {
             console.log(`[Cache] Serving ${username} from memory`);
             return res.json(cachedData);
         }
-        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, design_config, created_at FROM users WHERE username = ?', [username]);
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, music_url, design_config, created_at FROM users WHERE username = ?', [username]);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [user.id]);
         const wallets = await dbAll('SELECT * FROM wallets WHERE user_id = ?', [user.id]);
@@ -323,72 +329,6 @@ app.get('/api/user/:username', async (req, res) => {
     } catch (err) {
         console.error('API/USER Error:', err);
         res.status(500).json({ error: 'Server Error' });
-    }
-});
-
-// Mastodon-compatible Bridge for Cake Wallet / OpenAlias Handle support (@user@domain)
-app.get('/.well-known/webfinger', async (req, res) => {
-    const resource = req.query.resource;
-    if (!resource || !resource.startsWith('acct:')) {
-        return res.status(400).json({ error: 'Missing or invalid resource' });
-    }
-
-    const acct = resource.replace('acct:', '');
-    const parts = acct.split('@');
-    const username = parts[0];
-
-    try {
-        const user = await dbGet('SELECT username FROM users WHERE username = ?', [username.toLowerCase()]);
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const rootDomain = req.get('host').replace(/^www\./, '');
-
-        res.json({
-            subject: `acct:${user.username}@${rootDomain}`,
-            links: [
-                {
-                    rel: 'self',
-                    type: 'application/activity+json',
-                    href: `https://${rootDomain}/api/v1/accounts/${user.username}`
-                }
-            ]
-        });
-    } catch (err) {
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
-app.get('/api/v1/accounts/:username', async (req, res) => {
-    const username = req.params.username.toLowerCase();
-    try {
-        const user = await dbGet('SELECT id, username, display_name, bio FROM users WHERE username = ?', [username]);
-        if (!user) return res.status(404).json({ error: 'User not found' });
-
-        const wallets = await dbAll('SELECT currency, address FROM wallets WHERE user_id = ? AND currency = "XMR"', [user.id]);
-
-        let xmrNote = '';
-        if (wallets && wallets.length > 0) {
-            // Standard format for most wallets: "XMR: address" or "Monero: address"
-            xmrNote = `\nXMR: ${wallets[0].address.trim()}`;
-        }
-
-        const rootDomain = req.get('host').replace(/^www\./, '');
-
-        res.json({
-            id: user.id.toString(),
-            username: user.username,
-            acct: user.username,
-            display_name: user.display_name || user.username,
-            note: `${user.bio || ''}${xmrNote}`.trim(),
-            url: `https://${rootDomain}/user/${user.username}`,
-            header: '',
-            avatar: '',
-            emojis: [],
-            fields: []
-        });
-    } catch (err) {
-        console.error('[MASTODON_BRIDGE] Error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 app.put('/api/me', authenticateToken, async (req, res) => {
@@ -412,7 +352,7 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
     try {
         const type = req.params.type;
         console.log(`[UPLOAD] Processing upload for type: ${type} by user: ${req.user.username}`);
-        if (!['profile', 'banner', 'qr_logo'].includes(type)) {
+        if (!['profile', 'banner', 'qr_logo', 'audio'].includes(type)) {
             console.warn(`[UPLOAD] Invalid type requested: ${type}`);
             return res.status(400).json({ error: 'Invalid upload type' });
         }
@@ -421,36 +361,86 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
             return res.status(400).json({ error: 'No file uploaded' });
         }
         console.log(`[UPLOAD] Received file: ${req.file.originalname} (${req.file.size} bytes)`);
+
         const originalPath = req.file.path;
-        const filename = `${req.file.filename.split('.')[0]}.webp`;
-        const optimizedPath = path.join(uploadDir, filename);
-        let sharpInstance = sharp(originalPath);
-        if (type === 'banner') {
-            sharpInstance = sharpInstance.resize(1500, 500, { fit: 'cover', position: 'center' });
-        } else if (type === 'profile') {
-            sharpInstance = sharpInstance.resize(500, 500, { fit: 'cover', position: 'center' });
-        } else if (type === 'qr_logo') {
-            sharpInstance = sharpInstance.resize(200, 200, { fit: 'inside' });
-        }
-        await sharpInstance
-            .webp({ quality: 85 })
-            .toFile(optimizedPath);
-        fs.unlink(originalPath, (err) => {
-            if (err) console.error('Failed to delete original upload:', err);
-        });
-        const fileUrl = `/uploads/${filename}`;
-        if (type !== 'qr_logo') {
-            const column = type === 'profile' ? 'profile_image' : 'banner_image';
-            console.log(`[UPLOAD] Updating DB for ${column} to ${fileUrl}`);
-            await dbRun(`UPDATE users SET ${column} = ? WHERE id = ?`, [fileUrl, req.user.userId]);
+        let fileUrl = '';
+
+        if (type === 'audio') {
+            const extension = path.extname(req.file.originalname).toLowerCase();
+            const filename = `${req.file.filename.split('.')[0]}${extension}`;
+            const targetPath = path.join(uploadDir, filename);
+            fs.renameSync(originalPath, targetPath);
+            fileUrl = `/uploads/${filename}`;
+
+            console.log(`[UPLOAD] Updating DB for music_url to ${fileUrl}`);
+            await dbRun(`UPDATE users SET music_url = ? WHERE id = ?`, [fileUrl, req.user.userId]);
             const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
             if (user) profileCache.del(`user:${user.username}`);
+        } else if (path.extname(req.file.originalname).toLowerCase() === '.gif') {
+            // GIF HANDLING: Preserve animation
+            const GIF_LIMIT = 5 * 1024 * 1024; // 5MB limit for GIFs
+            if (req.file.size > GIF_LIMIT) {
+                fs.unlinkSync(originalPath);
+                return res.status(400).json({ error: 'GIF too large. Maximum 5MB allowed for animations.' });
+            }
+
+            const filename = `${req.file.filename.split('.')[0]}.gif`;
+            const targetPath = path.join(uploadDir, filename);
+
+            // Just move the file to keep it simple and preserve animation
+            fs.renameSync(originalPath, targetPath);
+            fileUrl = `/uploads/${filename}`;
+
+            if (type !== 'qr_logo') {
+                const column = type === 'profile' ? 'profile_image' : 'banner_image';
+                console.log(`[UPLOAD] Updating DB for ${column} (GIF) to ${fileUrl}`);
+                await dbRun(`UPDATE users SET ${column} = ? WHERE id = ?`, [fileUrl, req.user.userId]);
+                const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+                if (user) profileCache.del(`user:${user.username}`);
+            }
+        } else {
+            const filename = `${req.file.filename.split('.')[0]}.webp`;
+            const optimizedPath = path.join(uploadDir, filename);
+            let sharpInstance = sharp(originalPath);
+            if (type === 'banner') {
+                sharpInstance = sharpInstance.resize(1500, 500, { fit: 'cover', position: 'center' });
+            } else if (type === 'profile') {
+                sharpInstance = sharpInstance.resize(500, 500, { fit: 'cover', position: 'center' });
+            } else if (type === 'qr_logo') {
+                sharpInstance = sharpInstance.resize(200, 200, { fit: 'inside' });
+            }
+            await sharpInstance
+                .webp({ quality: 85 })
+                .toFile(optimizedPath);
+            fs.unlink(originalPath, (err) => {
+                if (err) console.error('Failed to delete original upload:', err);
+            });
+            fileUrl = `/uploads/${filename}`;
+
+            if (type !== 'qr_logo') {
+                const column = type === 'profile' ? 'profile_image' : 'banner_image';
+                console.log(`[UPLOAD] Updating DB for ${column} to ${fileUrl}`);
+                await dbRun(`UPDATE users SET ${column} = ? WHERE id = ?`, [fileUrl, req.user.userId]);
+                const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+                if (user) profileCache.del(`user:${user.username}`);
+            }
         }
         console.log(`[UPLOAD] Success: ${fileUrl}`);
         res.json({ message: 'Upload successful', url: fileUrl });
     } catch (err) {
         console.error('Upload Optimization Error:', err);
         res.status(500).json({ error: 'Upload or optimization failed' });
+    }
+});
+app.delete('/api/me/upload/audio', authenticateToken, async (req, res) => {
+    try {
+        await dbRun('UPDATE users SET music_url = NULL WHERE id = ?', [req.user.userId]);
+        const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+        if (user) profileCache.del(`user:${user.username}`);
+        res.json({ message: 'Music removed' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to remove music' });
     }
 });
 // PGP AUTH ENDPOINTS
@@ -869,29 +859,147 @@ app.delete('/api/me', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+
+// CAKE WALLET / MASTODON EMULATION ENDPOINTS
+app.get('/.well-known/webfinger', async (req, res) => {
+    try {
+        const resource = req.query.resource;
+        if (!resource || !resource.startsWith('acct:')) {
+            return res.status(400).json({ error: 'Invalid resource' });
+        }
+        const handle = resource.replace('acct:', '');
+        const [username, domain] = handle.split('@');
+
+        // Basic check if user exists
+        const user = await dbGet('SELECT id FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const protocol = req.headers['x-forwarded-proto'] || 'http';
+        const host = req.headers.host;
+        const baseUrl = `${protocol}://${host}`;
+
+        res.setHeader('Content-Type', 'application/jrd+json; charset=utf-8');
+        res.json({
+            subject: `acct:${handle}`,
+            links: [
+                {
+                    rel: 'http://webfinger.net/rel/profile-page',
+                    type: 'text/html',
+                    href: `${baseUrl}/${username}`
+                },
+                {
+                    rel: 'self',
+                    type: 'application/activity+json',
+                    href: `${baseUrl}/api/v1/accounts/${username}`
+                }
+            ]
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+app.get('/api/v1/accounts/:username', async (req, res) => {
+    try {
+        const username = req.params.username;
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, handle_config, design_config FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        if (!user) return res.status(404).json({ error: 'Not found' });
+
+        const wallets = await dbAll('SELECT id, currency, address FROM wallets WHERE user_id = ?', [user.id]);
+        const handleConfig = user.handle_config ? JSON.parse(user.handle_config) : { enabled_currencies: ['XMR'] };
+        const designConfig = user.design_config ? JSON.parse(user.design_config) : {};
+        const selectedWalletId = designConfig.qrDesign?.selectedWalletId;
+
+        // Prioritize the selected wallet ID if it exists
+        if (selectedWalletId) {
+            wallets.sort((a, b) => (a.id === selectedWalletId ? -1 : b.id === selectedWalletId ? 1 : 0));
+        }
+
+        let walletLines = [];
+        const addedCoins = new Set();
+
+        wallets.forEach(w => {
+            const coin = w.currency.toUpperCase();
+            if (handleConfig.enabled_currencies.includes(w.currency) && !addedCoins.has(coin)) {
+                walletLines.push(`${coin}: ${w.address}`);
+                addedCoins.add(coin);
+            }
+        });
+
+        let bioContent = "";
+        let bioWallets = "";
+
+        if (walletLines.length > 0) {
+            bioWallets = walletLines.join("\n");
+        }
+
+        // In Ultra-Strict mode, we ignore the user bio.
+        // But we must ensure bioContent is not undefined.
+        // plainNote = bioWallets; 
+
+        const plainNote = bioWallets;
+
+        const protocol = req.headers['x-forwarded-proto'] || 'http';
+        const host = req.headers.host;
+        const baseUrl = `${protocol}://${host}`;
+
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.json({
+            id: user.id.toString(),
+            username: user.username,
+            acct: `${user.username}@${host}`,
+            display_name: user.display_name || user.username,
+            locked: false,
+            bot: false,
+            discoverable: true,
+            group: false,
+            created_at: new Date(user.created_at || Date.now()).toISOString(),
+            note: plainNote,
+            url: `${baseUrl}/${user.username}`,
+            avatar: user.profile_image ? `${baseUrl}${user.profile_image}` : null,
+            avatar_static: user.profile_image ? `${baseUrl}${user.profile_image}` : null,
+            header: user.banner_image ? `${baseUrl}${user.banner_image}` : null,
+            header_static: user.banner_image ? `${baseUrl}${user.banner_image}` : null,
+            followers_count: 0,
+            following_count: 0,
+            statuses_count: 0,
+            last_status_at: null,
+            emojis: [],
+            fields: walletLines.flatMap(line => {
+                const parts = line.split(': ');
+                const coin = parts[0].toUpperCase();
+                const addr = parts[1];
+                const resFields = [{ name: coin, value: addr, verified_at: null }];
+                if (coin === 'XMR') {
+                    resFields.push({ name: 'Monero', value: addr, verified_at: null });
+                }
+                return resFields;
+            })
+        });
+    } catch (err) {
+        console.error('Mastodon Emulation Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
+app.put('/api/me/handle', authenticateToken, async (req, res) => {
+    try {
+        const { enabled_currencies } = req.body;
+        if (!Array.isArray(enabled_currencies)) {
+            return res.status(400).json({ error: 'Invalid config' });
+        }
+        await dbRun('UPDATE users SET handle_config = ? WHERE id = ?', [JSON.stringify({ enabled_currencies }), req.user.userId]);
+        profileCache.del(`user:${req.user.username}`);
+        res.json({ message: 'Handle configuration updated' });
+    } catch (err) {
+        console.error('Handle Update Error:', err);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
 const moneroMonitor = require('./monero_monitor');
 moneroMonitor.init();
 app.get('/api/dev-fund-status', (req, res) => {
     res.json(moneroMonitor.getStatus());
-});
-
-app.get('/api/version', (req, res) => {
-    res.json({ version: '1.20', timestamp: new Date().toISOString() });
-});
-
-// ADMIN: Temporary Batch DNS Sync Trigger (cPanel Version)
-app.get('/api/admin/sync-dns', async (req, res) => {
-    const adminKey = req.query.key;
-    if (adminKey !== 'goxmr-sovereign-admin') {
-        return res.status(403).send('Forbidden: Invalid Key');
-    }
-
-    try {
-        const result = await dnsSync.syncAll();
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
 });
 
 // Production: Serve static files from the 'dist' directory
@@ -912,7 +1020,8 @@ app.get('*', (req, res) => {
         res.status(404).send('Frontend build not found. Run npm run build.');
     }
 });
-
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`GOXMR Server running on port ${PORT} (0.0.0.0)`);
 });
+
+module.exports = app;

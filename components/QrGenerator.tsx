@@ -62,18 +62,28 @@ interface QrGeneratorProps {
         gradientColor: string;
         gradientType: GradientType;
         logoUrl: string | null;
+        amount: string;
     };
     onQrDesignChange: (design: any) => void;
     onUploadLogo: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    selectedWalletId: number | null;
+    onWalletChange: (id: number) => void;
+    onContentChange: (v: string) => void;
+    onCryptoChange: (v: CryptoType) => void;
 }
-export const QrGenerator: React.FC<QrGeneratorProps> = ({ wallets, qrDesign, onQrDesignChange, onUploadLogo }) => {
-    const [content, setContent] = useState('');
+export const QrGenerator: React.FC<QrGeneratorProps> = ({
+    wallets, qrDesign, onQrDesignChange, onUploadLogo,
+    selectedWalletId, onWalletChange, onContentChange, onCryptoChange
+}) => {
+    const content = qrDesign.content || '';
+    const setContent = onContentChange;
+    const selectedCrypto = qrDesign.selectedCrypto || 'monero';
+    const setSelectedCrypto = onCryptoChange;
+
     const [label, setLabel] = useState('');
     const [message, setMessage] = useState('');
-    const [amount, setAmount] = useState('');
-    const [selectedWalletId, setSelectedWalletId] = useState<number | null>(null);
-    const [qrSize, setQrSize] = useState(300);
-    const [selectedCrypto, setSelectedCrypto] = useState<CryptoType>('monero');
+    const [canvasSize, setCanvasSize] = useState(300);
+
     const [isDisposable, setIsDisposable] = useState(false);
     const [disposableTimeout, setDisposableTimeout] = useState(60);
     const [qrInstance, setQrInstance] = useState<QRCodeStyling | null>(null);
@@ -82,8 +92,8 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({ wallets, qrDesign, onQ
     const qrRef = useRef<HTMLDivElement>(null);
 
     const codeSnippet = `<QRCodeStyling
-  width={${qrSize}}
-  height={${qrSize}}
+  width={${canvasSize}}
+  height={${canvasSize}}
   data="${content}"
   dotsOptions={{
     color: "${qrDesign.color}",
@@ -94,74 +104,100 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({ wallets, qrDesign, onQ
   }}
 />`;
     useEffect(() => {
-        if (wallets && wallets.length > 0 && !selectedWalletId) {
-            const defaultWallet = wallets.find(w => w.currency === 'XMR') || wallets[0];
-            setSelectedWalletId(defaultWallet.id);
-            setContent(defaultWallet.address);
+        if (wallets && wallets.length > 0) {
+            if (!selectedWalletId && !qrDesign.content) {
+                const defaultWallet = wallets.find(w => w.currency === 'XMR') || wallets[0];
+                onWalletChange(defaultWallet.id);
+                setContent(defaultWallet.address);
+            } else if (selectedWalletId) {
+                const w = wallets.find(w => w.id === selectedWalletId);
+                if (w && !qrDesign.content) setContent(w.address);
+            }
         }
     }, [wallets, selectedWalletId]);
-    const handleWalletChange = (id: number) => {
+
+    const handleWalletChangeInternal = (id: number) => {
         const w = wallets.find(w => w.id === id);
         if (w) {
-            setSelectedWalletId(id);
+            onWalletChange(id);
             setContent(w.address);
             if (w.currency === 'XMR') setSelectedCrypto('monero');
             if (w.currency === 'BTC') setSelectedCrypto('bitcoin');
             if (w.currency === 'ETH') setSelectedCrypto('ethereum');
         }
     };
+
+    // Consolidated QR Update Logic
     useEffect(() => {
-        const qr = new QRCodeStyling({
-            width: qrSize,
-            height: qrSize,
-            type: 'svg',
-            data: 'https://goxmr.click',
-            image: '',
-            dotsOptions: { color: qrDesign.color, type: qrDesign.shape },
-            backgroundOptions: { color: qrDesign.backgroundColor },
-            imageOptions: { crossOrigin: 'anonymous', margin: 10 }
-        });
-        setQrInstance(qr);
-    }, []);
-    useEffect(() => {
-        if (!qrInstance) return;
-        qrInstance.update({
-            width: qrSize,
-            height: qrSize,
-            image: qrDesign.logoUrl || '',
-            dotsOptions: {
-                color: qrDesign.color,
-                type: qrDesign.shape,
-                gradient: qrDesign.useGradient ? {
-                    type: qrDesign.gradientType,
-                    rotation: 0,
-                    colorStops: [{ offset: 0, color: qrDesign.color }, { offset: 1, color: qrDesign.gradientColor }]
-                } : undefined
-            },
-            backgroundOptions: { color: qrDesign.backgroundColor },
-            cornersSquareOptions: { type: qrDesign.cornerType, color: qrDesign.color },
-            cornersDotOptions: { type: qrDesign.cornerType, color: qrDesign.color },
-        });
-    }, [qrDesign, qrSize, qrInstance]);
-    useEffect(() => {
-        if (!qrInstance || !content) return;
+        let instance = qrInstance;
+        if (!instance) {
+            instance = new QRCodeStyling({
+                width: canvasSize,
+                height: canvasSize,
+                type: 'svg',
+                data: content || 'https://goxmr.click',
+                image: qrDesign.logoUrl || '',
+                dotsOptions: { color: qrDesign.color, type: qrDesign.shape as any },
+                backgroundOptions: { color: qrDesign.backgroundColor },
+                imageOptions: { crossOrigin: 'anonymous', margin: 10 }
+            });
+            setQrInstance(instance);
+        }
+
         const timer = setTimeout(() => {
+            if (!instance) return;
             setIsLoading(true);
-            qrInstance.update({ data: content });
+
+            // Calculate current QR data
+            let qrData = content || 'https://goxmr.click';
+            if (qrDesign.amount && content) {
+                if (selectedCrypto === 'monero') {
+                    qrData = `monero:${content}?tx_amount=${qrDesign.amount}`;
+                } else if (selectedCrypto === 'bitcoin') {
+                    qrData = `bitcoin:${content}?amount=${qrDesign.amount}`;
+                } else if (selectedCrypto === 'ethereum') {
+                    qrData = `ethereum:${content}?value=${qrDesign.amount}`;
+                }
+            }
+
+            // Apply all design updates at once
+            instance.update({
+                width: canvasSize,
+                height: canvasSize,
+                data: qrData,
+                image: qrDesign.logoUrl || '',
+                dotsOptions: {
+                    color: qrDesign.color,
+                    type: qrDesign.shape as any,
+                    gradient: qrDesign.useGradient ? {
+                        type: qrDesign.gradientType as any,
+                        rotation: 0,
+                        colorStops: [{ offset: 0, color: qrDesign.color }, { offset: 1, color: qrDesign.gradientColor }]
+                    } : undefined
+                },
+                backgroundOptions: { color: qrDesign.backgroundColor },
+                cornersSquareOptions: { type: qrDesign.cornerType as any, color: qrDesign.color },
+                cornersDotOptions: { type: qrDesign.cornerType as any, color: qrDesign.color },
+            });
+
             if (qrRef.current) {
                 qrRef.current.innerHTML = '';
-                qrInstance.append(qrRef.current);
+                instance.append(qrRef.current);
             }
+
             setTimeout(() => {
                 setIsLoading(false);
                 setIsGenerated(true);
             }, 500);
-        }, 800);
+        }, 500);
+
         return () => clearTimeout(timer);
-    }, [content, amount, qrInstance]);
+    }, [content, qrDesign, canvasSize, selectedCrypto]);
+
     const handleDownload = (ext: 'png' | 'svg' | 'pdf') => {
         if (qrInstance) qrInstance.download({ name: 'goxmr-qr', extension: ext });
     };
+
     const applyPreset = (p: Preset) => {
         onQrDesignChange({
             ...qrDesign,
@@ -197,10 +233,10 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({ wallets, qrDesign, onQ
                     content={content} onContentChange={setContent}
                     label={label} onLabelChange={setLabel}
                     message={message} onMessageChange={setMessage}
-                    amount={amount} onAmountChange={setAmount}
+                    amount={qrDesign.amount} onAmountChange={(v) => onQrDesignChange({ ...qrDesign, amount: v })}
                     wallets={wallets}
                     selectedWalletId={selectedWalletId}
-                    onWalletChange={handleWalletChange}
+                    onWalletChange={handleWalletChangeInternal}
                     onLogoChange={onUploadLogo}
                     logoUrl={qrDesign.logoUrl}
                     color={qrDesign.color} onColorChange={(v) => onQrDesignChange({ ...qrDesign, color: v })}
@@ -220,7 +256,7 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({ wallets, qrDesign, onQ
                     selectedCrypto={selectedCrypto}
                     onCryptoChange={setSelectedCrypto}
                     codeSnippet={codeSnippet}
-                    qrSize={qrSize} onQrSizeChange={setQrSize}
+                    qrSize={canvasSize} onQrSizeChange={setCanvasSize}
                     onDetectAndSetCrypto={(text) => {
                         const type = detectCrypto(text);
                         if (type) setSelectedCrypto(type as CryptoType);

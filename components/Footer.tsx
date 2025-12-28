@@ -1,21 +1,35 @@
 import React from 'react';
+import { Terminal, ArrowUpRight, Shield } from 'lucide-react';
+
+const FOOTER_LINKS = [
+    { name: 'SlowBearDigger', url: 'https://slowbeardigger.dev/' },
+    { name: 'Telegram', url: 'https://t.me/SlowBearDigger' },
+    { name: 'Monerica', url: 'https://monerica.com/freelancers/software-developers/slowbeardigger' },
+    { name: 'Simplex', url: 'https://smp11.simplex.im/a#or5wpSRvYq4UrM1ASZ0qgDIiGON8lcEQXitc1gREJys' },
+    { name: 'XMRChat', url: 'https://goxmr.click/xmrchat.com/slowbeardigger' },
+    { name: 'GitHub', url: 'https://github.com/SlowBearDigger/' },
+    { name: 'XMR Bazaar', url: 'https://xmrbazaar.com/user/SlowBearDigger/' },
+    { name: 'X (Twitter)', url: 'https://x.com/SlowBearDigger' },
+];
 
 export const Footer: React.FC = () => {
     return (
-        <>
-            <a
-                href="https://x.com/SlowBearDigger"
-                target="_blank"
-                rel="noreferrer"
-                className="fixed bottom-12 right-4 z-50 font-mono text-[10px] font-bold text-gray-400 opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-auto bg-white/80 p-2 border border-black"
-            >
-                Made by @SlowBearDigger
-            </a>
-
-            <div className="fixed bottom-0 left-0 w-full bg-monero-orange text-black font-mono text-xs py-1 overflow-hidden border-t-2 border-black z-40">
-                <div className="whitespace-nowrap animate-marquee flex gap-8">
-                    {Array(10).fill("GOXMR IS LIVE /// CLAIM YOUR SOVEREIGN HANDLE /// ZERO TRACKING ///").map((text, i) => (
-                        <span key={i} className="font-bold">{text}</span>
+        <footer className="w-full mt-auto border-t-2 border-black dark:border-white bg-white dark:bg-black overflow-hidden select-none">
+            {/* Only Marquee: Forward Direction */}
+            <div className="border-b-2 border-black dark:border-white py-4 bg-monero-orange text-white overflow-hidden group">
+                <div className="flex animate-marquee whitespace-nowrap group-hover:[animation-play-state:paused]">
+                    {[...FOOTER_LINKS, ...FOOTER_LINKS, ...FOOTER_LINKS].map((link, i) => (
+                        <a
+                            key={`fwd-${i}`}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 mx-8 font-mono font-black uppercase text-xs hover:text-black transition-colors"
+                        >
+                            <Terminal size={12} />
+                            {link.name}
+                            <ArrowUpRight size={10} className="opacity-50" />
+                        </a>
                     ))}
                 </div>
             </div>
@@ -23,13 +37,12 @@ export const Footer: React.FC = () => {
             <style>{`
                 @keyframes marquee {
                     0% { transform: translateX(0); }
-                    100% { transform: translateX(-50%); }
+                    100% { transform: translateX(-33.33%); }
                 }
                 .animate-marquee {
-                    display: flex;
-                    animation: marquee 20s linear infinite;
+                    animation: marquee 40s linear infinite;
                 }
             `}</style>
-        </>
+        </footer>
     );
 };

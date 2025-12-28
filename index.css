@@ -23,12 +23,12 @@
         @apply bg-white text-black transition-colors duration-300;
         overflow-x: hidden;
         font-family: 'Space Grotesk', sans-serif;
-        --grid-color: rgba(0, 0, 0, 0.1);
+        --grid-color: rgba(0, 0, 0, 0.45);
     }
 
     body.dark {
         @apply bg-[#000000] text-white;
-        --grid-color: rgba(255, 255, 255, 0.1);
+        --grid-color: rgba(255, 255, 255, 0.4);
     }
 }
 
@@ -53,7 +53,154 @@
     background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
-/* Custom animations from index.html that might not be in tailwind config yet */
+/* Synthwave Grid Animation */
+@keyframes synthwave-grid {
+    0% {
+        transform: perspective(500px) rotateX(60deg) translateY(0px);
+    }
+
+    100% {
+        transform: perspective(500px) rotateX(60deg) translateY(60px);
+    }
+}
+
+@keyframes pulse-slow {
+
+    0%,
+    100% {
+        opacity: 0.1;
+    }
+
+    50% {
+        opacity: 0.2;
+    }
+}
+
+@keyframes float-slow {
+
+    0%,
+    100% {
+        transform: skewX(-12deg) translateX(0px);
+    }
+
+    50% {
+        transform: skewX(-12deg) translateX(20px);
+    }
+}
+
+@keyframes float-delayed {
+
+    0%,
+    100% {
+        transform: skewX(-12deg) translateX(0px);
+    }
+
+    50% {
+        transform: skewX(-12deg) translateX(-15px);
+    }
+}
+
+/* Glitch Animation */
+@keyframes glitch-anim {
+    0% {
+        clip-path: inset(80% 0 0 0);
+        transform: translate(-5px, -5px);
+    }
+
+    10% {
+        clip-path: inset(10% 0 85% 0);
+        transform: translate(5px, 5px);
+    }
+
+    20% {
+        clip-path: inset(80% 0 0 0);
+        transform: translate(-5px, 5px);
+    }
+
+    30% {
+        clip-path: inset(10% 0 85% 0);
+        transform: translate(0);
+    }
+
+    40% {
+        clip-path: inset(50% 0 30% 0);
+        transform: translate(-5px, 0);
+    }
+
+    50% {
+        clip-path: inset(10% 0 85% 0);
+        transform: translate(5px, 0);
+    }
+
+    60% {
+        clip-path: inset(80% 0 0 0);
+        transform: translate(0);
+    }
+
+    100% {
+        clip-path: inset(80% 0 0 0);
+        transform: translate(0);
+    }
+}
+
+.animate-synthwave {
+    animation: synthwave-grid 3s linear infinite;
+}
+
+.animate-glitch {
+    animation: glitch-anim 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+    background: white;
+    mix-blend-mode: exclusion;
+}
+
+.animate-pulse-slow {
+    animation: pulse-slow 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-float-slow {
+    animation: float-slow 15s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+    animation: float-delayed 12s ease-in-out infinite;
+}
+
+/* Blueprint Mode Overrides */
+.blueprint-mode {
+    --grid-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.blueprint-mode body,
+.blueprint-mode .bg-white,
+.blueprint-mode .bg-zinc-900,
+.blueprint-mode .bg-gray-50,
+.blueprint-mode .dark\:bg-zinc-900 {
+    background-color: #0047AB !important;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
+    background-size: 20px 20px !important;
+}
+
+.blueprint-mode .text-black,
+.blueprint-mode .text-white,
+.blueprint-mode .dark\:text-white,
+.blueprint-mode .text-gray-600 {
+    color: #FFFFFF !important;
+}
+
+.blueprint-mode .border-black,
+.blueprint-mode .border-white,
+.blueprint-mode .dark\:border-white,
+.blueprint-mode .border-zinc-800 {
+    border-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.blueprint-mode button:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: #FFFFFF !important;
+}
+
 .typewriter-text {
     font-family: 'JetBrains Mono', monospace;
     overflow: hidden;

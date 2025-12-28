@@ -120,6 +120,26 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
                             </div>
                         )}
                     </div>
+                    {(selectedCrypto === 'monero' || selectedCrypto === 'bitcoin' || selectedCrypto === 'ethereum') && (
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Default Amount</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span className="text-gray-500 font-mono text-sm">₿</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={amount}
+                                    onChange={(e) => onAmountChange(e.target.value)}
+                                    className="w-full border-2 border-black dark:border-white pl-8 pr-3 py-3 text-sm font-mono outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 bg-gray-100 dark:bg-zinc-800 dark:text-white"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            <p className="mt-1 text-[10px] text-gray-400 font-mono italic">
+                                * This amount will be encoded in the QR for easy checkout.
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
             { }

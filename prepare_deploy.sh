@@ -25,9 +25,7 @@ cp $SERVER_DIR/package.json $DEPLOY_DIR/
 cp $SERVER_DIR/index.js $DEPLOY_DIR/
 cp $SERVER_DIR/db.js $DEPLOY_DIR/
 cp $SERVER_DIR/monero_monitor.js $DEPLOY_DIR/
-cp $SERVER_DIR/dns.js $DEPLOY_DIR/
-cp $SERVER_DIR/cpanel_dns.js $DEPLOY_DIR/
-cp $SERVER_DIR/sync_all_dns.js $DEPLOY_DIR/
+cp $SERVER_DIR/migrate*.js $DEPLOY_DIR/
 
 # Create a clean .env file (DO NOT COPY LOCAL SECRETS)
 echo "🔒 Creating template .env..."
@@ -42,30 +40,18 @@ EOL
 echo "📦 Copying Frontend Assets..."
 cp -r dist $DEPLOY_DIR/dist
 
-# 5. Create .htaccess
-echo "📝 Creating .htaccess..."
-# Note: cPanel's Node.js selector creates its own rules, but this ensures HTTPS
-cat > $DEPLOY_DIR/.htaccess << EOL
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  
-  # Force HTTPS
-  RewriteCond %{HTTPS} off
-  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-  # Security Headers
-  <IfModule mod_headers.c>
-    Header set X-Content-Type-Options "nosniff"
-    Header set X-XSS-Protection "1; mode=block"
-  </IfModule>
-</IfModule>
-EOL
+# 5. Zip everything
+echo "🤐 Creating Deployment Zip..."
+cd $DEPLOY_DIR
+zip -r ../goxmr_deploy_v1.zip .
+cd ..
 
 echo "✅ Preparation Complete!"
 echo "---------------------------------------------------"
-echo "Instructions:"
-echo "1. Go to the '$DEPLOY_DIR' folder."
-echo "2. Compress all files inside it (Zip the *contents*, not the folder itself)."
-echo "3. Upload the zip to your domain folder on Namecheap."
-echo "4. Follow the instructions in 'deployment_instructions.md'."
+echo "Instructions for Shared Hosting (Namecheap):"
+echo "1. DELETE ALL FILES in your domain folder on the server (inc. hidden files)."
+echo "2. Upload 'goxmr_deploy_v1.zip' and Extract it."
+echo "3. Go to cPanel -> Setup Node.js App."
+echo "4. Application Startup File: index.js"
+echo "5. Click 'Run NPM Install' and then 'Restart'."
 echo "---------------------------------------------------"

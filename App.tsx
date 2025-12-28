@@ -8,23 +8,12 @@ import { Footer } from './components/Footer';
 import { Background } from './components/Background';
 import { Modal } from './components/Modal';
 import { LoginForm, RegisterForm } from './components/AuthForms';
+import { Guide } from './components/Guide';
+import { LearnMonero } from './components/LearnMonero';
+
 const App: React.FC = () => {
     const [isLoggedIn, setUserLoggedIn] = useState(false);
     const [username, setUsername] = useState<string | null>(null);
-
-    // Subdomain routing logic (e.g., user.goxmr.click -> goxmr.click/user/user)
-    useEffect(() => {
-        const hostname = window.location.hostname;
-        const parts = hostname.split('.');
-        // Check if there's a subdomain and it's not localhost/127.0.0.1 or 'www'
-        if (parts.length > 2 && !hostname.includes('localhost') && !hostname.includes('127.0.0.1') && parts[0] !== 'www') {
-            const subdomain = parts[0];
-            // If the current path is NOT already the profile path, redirect
-            if (!window.location.pathname.startsWith(`/user/${subdomain}`)) {
-                window.location.replace(`${window.location.protocol}//${parts.slice(1).join('.')}/user/${subdomain}`);
-            }
-        }
-    }, []);
 
     const [isLoginOpen, setIsLoginOpen] = useState(false);
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -46,6 +35,11 @@ const App: React.FC = () => {
 
     useEffect(() => {
         localStorage.setItem('goxmr_theme', theme);
+        if (theme === 'dark') {
+            document.body.classList.add('dark');
+        } else {
+            document.body.classList.remove('dark');
+        }
     }, [theme]);
 
     const toggleTheme = () => {
@@ -56,6 +50,7 @@ const App: React.FC = () => {
         if (username) setInitialRegisterUsername(username);
         setIsRegisterOpen(true);
     };
+
     const handleAuthSuccess = () => {
         setIsLoginOpen(false);
         setIsRegisterOpen(false);
@@ -64,6 +59,7 @@ const App: React.FC = () => {
         if (savedUser) setUsername(savedUser);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
+
     const handleLogout = () => {
         localStorage.removeItem('goxmr_token');
         localStorage.removeItem('goxmr_user');
@@ -81,23 +77,29 @@ const App: React.FC = () => {
         </div>
     );
 
-    const MainLayout = () => (
-        <>
-            <Header
-                isLoggedIn={isLoggedIn}
-                username={username || ''}
-                onLoginClick={() => setIsLoginOpen(true)}
-                onRegisterClick={() => setIsRegisterOpen(true)}
-                onLogoutClick={handleLogout}
-                theme={theme}
-                onThemeToggle={toggleTheme}
-            />
-            <main className="relative z-10 pt-20 pb-12 min-h-screen">
-                <Outlet />
-            </main>
-            <Footer />
-        </>
-    );
+    const MainLayout = () => {
+        const [activeSection, setActiveSection] = useState<'home' | 'learn' | 'guide'>('home');
+
+        return (
+            <div className="min-h-screen flex flex-col pt-16 md:pt-20">
+                <Header
+                    isLoggedIn={isLoggedIn}
+                    username={username || ''}
+                    onLoginClick={() => setIsLoginOpen(true)}
+                    onRegisterClick={() => setIsRegisterOpen(true)}
+                    onLogoutClick={handleLogout}
+                    theme={theme}
+                    onThemeToggle={toggleTheme}
+                    activeSection={activeSection}
+                    onNavigate={setActiveSection}
+                />
+                <main className="flex-grow">
+                    <Outlet context={{ activeSection, setActiveSection }} />
+                </main>
+                <Footer />
+            </div>
+        );
+    };
 
     return (
         <div className={theme === 'dark' ? 'dark' : ''}>
@@ -112,7 +114,7 @@ const App: React.FC = () => {
                     } />
                 </Route>
 
-                {/* Public Profile (No Header/Footer, No Dark Mode) */}
+                {/* Public Profile (No Header/Footer, No Global Dark Mode) */}
                 <Route path="/:username" element={
                     <div className="light font-sans selection:bg-monero-orange selection:text-white relative min-h-screen">
                         <PublicProfile />
@@ -130,4 +132,5 @@ const App: React.FC = () => {
         </div>
     );
 };
+
 export default App;

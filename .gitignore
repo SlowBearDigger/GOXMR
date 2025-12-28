@@ -16,6 +16,7 @@ dist-ssr/
 build/
 deploy/
 deploy.zip
+goxmr_deploy_v1.zip
 
 # Environment & Sensitive Data
 .env

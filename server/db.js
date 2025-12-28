@@ -28,11 +28,23 @@ const initDb = () => {
             if (err) console.error('Error creating users table', err);
             else console.log('Users table ready');
         });
-        db.run(`ALTER TABLE users ADD COLUMN recovery_hash TEXT`, (err) => {
-        });
-        db.run(`ALTER TABLE users ADD COLUMN design_config TEXT`, (err) => {
-        });
-        db.run(`ALTER TABLE users ADD COLUMN pgp_public_key TEXT`, (err) => {
+        const migrations = [
+            `ALTER TABLE users ADD COLUMN recovery_hash TEXT`,
+            `ALTER TABLE users ADD COLUMN design_config TEXT`,
+            `ALTER TABLE users ADD COLUMN pgp_public_key TEXT`,
+            `ALTER TABLE users ADD COLUMN handle_config TEXT`,
+            `ALTER TABLE users ADD COLUMN music_url TEXT`
+        ];
+
+        migrations.forEach(sql => {
+            db.run(sql, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    // Ignore expected "already exists" errors, log others
+                    console.log(`[DB Migration] Note: ${sql.slice(0, 30)}... skipped or already applied.`);
+                } else if (!err) {
+                    console.log(`[DB Migration] Applied: ${sql}`);
+                }
+            });
         });
         db.run(`
             CREATE TABLE IF NOT EXISTS wallets (

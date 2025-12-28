@@ -7,6 +7,7 @@ import QRCodeStyling from 'qr-code-styling';
 interface UserProfile {
     banner_image?: string;
     profile_image?: string;
+    music_url?: string;
     bio?: string;
     links?: Array<{ type: string; title: string; url: string; icon?: string }>;
     wallets?: Array<{ currency: string; label: string; address: string }>;
@@ -17,7 +18,23 @@ interface UserProfile {
         borderColor?: string;
         activeProtocol?: string;
         tags?: string[];
-        qrDesign?: any;
+        qrDesign?: {
+            color?: string;
+            shape?: string;
+            cornerType?: string;
+            backgroundColor?: string;
+            useGradient?: boolean;
+            gradientColor?: string;
+            gradientType?: string;
+            logoUrl?: string;
+            amount?: string;
+            selectedWalletId?: number | string;
+        };
+        sonicDesign?: {
+            color?: string;
+            barColor?: string;
+            useVisualizer?: boolean;
+        };
         buttonColor?: string;
     };
 }
@@ -114,8 +131,48 @@ export const PublicProfile: React.FC = () => {
     useEffect(() => {
         if (isLoading || !profile) return;
 
-        const defaultWallet = wallets.find(w => w.currency === 'XMR' && w.address) || wallets.find(w => w.address);
-        const qrData = defaultWallet ? defaultWallet.address : `https://goxmr.click/${username}`;
+        // 1. Resolve which wallet/content to use
+        let qrData = qrDesign.content || '';
+        let cryptoType = qrDesign.selectedCrypto || 'monero';
+        let targetAddress = qrData;
+
+        // 2. If no content, fallback to wallet address
+        if (!qrData) {
+            let targetWallet = wallets.find(w => w.id === qrDesign.selectedWalletId);
+            if (!targetWallet) {
+                targetWallet = wallets.find(w => w.currency === 'XMR' && w.address);
+            }
+            if (!targetWallet) {
+                targetWallet = wallets.find(w => w.address);
+            }
+
+            if (targetWallet) {
+                targetAddress = targetWallet.address;
+                qrData = targetAddress;
+                cryptoType = targetWallet.currency.toLowerCase() as any;
+            } else {
+                qrData = `https://goxmr.click/${username}`;
+            }
+        }
+
+        // 3. Apply Amount if applicable
+        if (qrDesign.amount && targetAddress) {
+            if (cryptoType === 'monero') {
+                qrData = `monero:${targetAddress}?tx_amount=${qrDesign.amount}`;
+            } else if (cryptoType === 'bitcoin') {
+                qrData = `bitcoin:${targetAddress}?amount=${qrDesign.amount}`;
+            } else if (cryptoType === 'ethereum') {
+                qrData = `ethereum:${targetAddress}?value=${qrDesign.amount}`;
+            } else if (qrData.startsWith('http')) {
+                try {
+                    const url = new URL(qrData);
+                    url.searchParams.set('amount', qrDesign.amount);
+                    qrData = url.toString();
+                } catch (e) {
+                    // Not a valid URL, skip amount
+                }
+            }
+        }
 
         const qr = new QRCodeStyling({
             width: 300,
@@ -127,7 +184,7 @@ export const PublicProfile: React.FC = () => {
                 color: qrDesign.color,
                 type: qrDesign.shape as any,
                 gradient: qrDesign.useGradient ? {
-                    type: qrDesign.gradientType,
+                    type: qrDesign.gradientType as any,
                     rotation: 0,
                     colorStops: [{ offset: 0, color: qrDesign.color }, { offset: 1, color: qrDesign.gradientColor }]
                 } : undefined
@@ -138,11 +195,12 @@ export const PublicProfile: React.FC = () => {
             imageOptions: { crossOrigin: 'anonymous', margin: 10 }
         });
 
+        qrInstance.current = qr;
+
         if (qrRef.current) {
             qrRef.current.innerHTML = '';
             qr.append(qrRef.current);
         }
-        qrInstance.current = qr;
     }, [isLoading, profile, qrDesign, wallets, username]);
 
     const handleCopy = (text: string, type: string) => {
@@ -167,10 +225,17 @@ export const PublicProfile: React.FC = () => {
         if (isLoading || error) return;
         const currentBG = PC || BG || (isAmber ? '#0d0d0d' : isVoid ? '#000000' : isShadow ? '#010203' : isNeon ? '#0a0015' : '#ffffff');
         document.body.style.backgroundColor = currentBG;
+
+        // Update browser tab title
+        if (username) {
+            document.title = `@${username} | GoXMR Sovereign`;
+        }
+
         return () => {
             document.body.style.backgroundColor = '';
+            document.title = 'GoXMR Sovereign'; // Reset title on unmount
         };
-    }, [isLoading, error, PC, BG, isAmber, isVoid, isShadow, isNeon]);
+    }, [isLoading, error, PC, BG, isAmber, isVoid, isShadow, isNeon, username]);
 
     if (isLoading) {
         return (
@@ -313,46 +378,9 @@ export const PublicProfile: React.FC = () => {
                                 ))}
                             </div>
 
-                            <p className="font-mono text-sm sm:text-base text-gray-700 w-full max-w-lg mx-auto mb-6 leading-relaxed border-l-4 border-accent pl-4 text-left bg-gray-50/50 py-3" style={{ color: TC || 'inherit' }}>
+                            <p className="font-mono text-sm sm:text-base text-gray-700 w-full max-w-lg mx-auto mb-10 leading-relaxed border-l-4 border-accent pl-4 text-left bg-gray-50/50 py-3" style={{ color: TC || 'inherit' }}>
                                 {profile?.bio || "No manifesto encrypted."}
                             </p>
-
-                            {xmrWallet && (
-                                <div className="mb-10 w-full max-w-lg mx-auto bg-black text-white p-3 border-2 border-accent shadow-accent animate-in fade-in slide-in-from-top-4 duration-1000">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-[8px] font-bold uppercase tracking-widest text-monero-orange">Wallet_Lookup_Protocol</span>
-                                        <div className="flex gap-1">
-                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
-                                            <div className="w-1 h-1 bg-green-500 rounded-full"></div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2 overflow-hidden">
-                                        <div className="font-mono text-[10px] sm:text-xs truncate">
-                                            <span className="text-gray-500">@</span>
-                                            <span className="text-white font-bold">{username}</span>
-                                            <span className="text-gray-500">@{(() => {
-                                                const parts = window.location.hostname.split('.');
-                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                            })()}</span>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                const rootDomain = (() => {
-                                                    const parts = window.location.hostname.split('.');
-                                                    return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                })();
-                                                const handle = `@${username}@${rootDomain}`;
-                                                navigator.clipboard.writeText(handle);
-                                                setCopied(handle);
-                                                setTimeout(() => setCopied(null), 2000);
-                                            }}
-                                            className="shrink-0 text-[10px] border border-white/20 px-2 py-0.5 hover:bg-white hover:text-black transition-colors"
-                                        >
-                                            {copied && copied.startsWith('@') ? 'COPIED' : 'COPY'}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         <div className="space-y-4 mb-12">
@@ -475,6 +503,144 @@ export const PublicProfile: React.FC = () => {
                         <RouterLink to="/" className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 sm:px-8 sm:py-4 font-mono font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none text-xs sm:text-sm">
                             Forge Your Own Base <Zap size={16} />
                         </RouterLink>
+                    </div>
+
+                    {/* Sonic Module (Lightweight Player) */}
+                    {profile.music_url && (
+                        <SonicModule
+                            url={profile.music_url}
+                            design={profile.design?.sonicDesign}
+                        />
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SonicModule = ({ url, design }: { url: string, design?: any }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = React.useRef<HTMLAudioElement>(null);
+    const canvasRef = React.useRef<HTMLCanvasElement>(null);
+    const audioContextRef = React.useRef<AudioContext | null>(null);
+    const analyzerRef = React.useRef<AnalyserNode | null>(null);
+    const sourceRef = React.useRef<MediaElementAudioSourceNode | null>(null);
+    const animationRef = React.useRef<number>(0);
+
+    const sonicColor = design?.color || '#F97316';
+    const barColor = design?.barColor || '#F97316';
+    const useVisualizer = design?.useVisualizer !== false;
+
+    useEffect(() => {
+        if (!useVisualizer || !isPlaying) return;
+
+        if (!audioContextRef.current && audioRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            analyzerRef.current = audioContextRef.current.createAnalyser();
+            sourceRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
+            sourceRef.current.connect(analyzerRef.current);
+            analyzerRef.current.connect(audioContextRef.current.destination);
+            analyzerRef.current.fftSize = 64;
+        }
+
+        const draw = () => {
+            if (!analyzerRef.current || !canvasRef.current) return;
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            const bufferLength = analyzerRef.current.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyzerRef.current.getByteFrequencyData(dataArray);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = (dataArray[i] / 255) * canvas.height;
+
+                ctx.fillStyle = barColor;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 2;
+            }
+
+            animationRef.current = requestAnimationFrame(draw);
+        };
+
+        draw();
+
+        return () => {
+            if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        };
+    }, [isPlaying, useVisualizer, barColor]);
+
+    const togglePlay = () => {
+        if (!audioRef.current) return;
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            if (audioContextRef.current?.state === 'suspended') {
+                audioContextRef.current.resume();
+            }
+            audioRef.current.play().catch(e => console.error("Playback failed:", e));
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    const handleTimeUpdate = () => {
+        if (audioRef.current && audioRef.current.currentTime >= 15) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(e => console.error("Loop failed:", e));
+        }
+    };
+
+    return (
+        <div className="fixed bottom-6 right-6 z-50">
+            <div
+                className="bg-black dark:bg-zinc-900 border-2 p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)] flex items-center gap-3 transition-colors"
+                style={{ borderColor: sonicColor, boxShadow: `4px 4px 0px 0px ${sonicColor}40` }}
+            >
+                <audio
+                    ref={audioRef}
+                    src={url}
+                    loop
+                    crossOrigin="anonymous"
+                    onTimeUpdate={handleTimeUpdate}
+                />
+                <button
+                    onClick={togglePlay}
+                    className="w-10 h-10 flex items-center justify-center hover:opacity-80 transition-all focus:outline-none"
+                    style={{ backgroundColor: sonicColor, color: '#fff' }}
+                    aria-label={isPlaying ? "Pause music" : "Play music"}
+                >
+                    {isPlaying ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                    ) : (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                        </svg>
+                    )}
+                </button>
+                <div className="pr-2 select-none pointer-events-none text-right min-w-[80px]">
+                    <div className="text-[10px] font-black uppercase leading-none mb-1" style={{ color: sonicColor }}>Sonic Module</div>
+                    <div className="flex gap-1 justify-end h-6 items-end">
+                        {useVisualizer ? (
+                            <canvas ref={canvasRef} width={60} height={24} className="w-[60px] h-6" />
+                        ) : (
+                            [1, 2, 3, 4].map(i => (
+                                <div
+                                    key={i}
+                                    className={`w-0.5 h-2.5 transition-colors ${isPlaying ? 'animate-pulse' : ''}`}
+                                    style={{ backgroundColor: barColor, opacity: 0.3, animationDelay: `${i * 0.2}s` }}
+                                />
+                            ))
+                        )}
                     </div>
                 </div>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown } from 'lucide-react';
+import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music } from 'lucide-react';
 import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
 import { DashboardNav } from './DashboardNav';
@@ -99,8 +99,11 @@ export const Dashboard: React.FC = () => {
     const [hasRecovery, setHasRecovery] = useState(true);
     const [hasPgp, setHasPgp] = useState(false);
     const [pgpKey, setPgpKey] = useState('');
+    const [handleConfig, setHandleConfig] = useState<{ enabled_currencies: string[] }>({ enabled_currencies: ['XMR'] });
+    const [musicUrl, setMusicUrl] = useState<string | null>(null);
     const fileInputRefProfile = React.useRef<HTMLInputElement>(null);
     const fileInputRefBanner = React.useRef<HTMLInputElement>(null);
+    const fileInputRefMusic = React.useRef<HTMLInputElement>(null);
     const [qrDesign, setQrDesign] = useState({
         color: '#F26822',
         shape: 'square',
@@ -110,6 +113,15 @@ export const Dashboard: React.FC = () => {
         gradientColor: '#000000',
         gradientType: 'linear',
         logoUrl: null as string | null,
+        selectedWalletId: null as number | null,
+        amount: '',
+        content: '',
+        selectedCrypto: 'monero' as 'monero' | 'bitcoin' | 'ethereum' | 'custom',
+    });
+    const [sonicDesign, setSonicDesign] = useState({
+        color: '#F97316',
+        barColor: '#F97316',
+        useVisualizer: true,
     });
     const fetchProfile = async () => {
         const token = localStorage.getItem('goxmr_token');
@@ -125,11 +137,13 @@ export const Dashboard: React.FC = () => {
                 setBio(data.bio || '');
                 if (data.profile_image) setProfileImage(data.profile_image);
                 if (data.banner_image) setBannerImage(data.banner_image);
+                if (data.music_url) setMusicUrl(data.music_url);
                 if (data.links) setLinks(data.links);
                 if (data.wallets) setWallets(data.wallets);
                 setHasRecovery(!!data.hasRecovery);
                 setHasPgp(!!data.hasPgp);
                 if (data.pgp_public_key) setPgpKey(data.pgp_public_key);
+                if (data.handle_config) setHandleConfig(data.handle_config);
                 if (data.design) {
                     if (data.design.accentColor) setAccentColor(data.design.accentColor);
                     if (data.design.backgroundColor) setBackgroundColor(data.design.backgroundColor);
@@ -139,7 +153,22 @@ export const Dashboard: React.FC = () => {
                     if (data.design.buttonColor) setButtonColor(data.design.buttonColor);
                     if (data.design.tags) setDesignTags(data.design.tags);
                     if (data.design.activeProtocol) setActiveProtocol(data.design.activeProtocol);
-                    if (data.design.qrDesign) setQrDesign({ ...qrDesign, ...data.design.qrDesign });
+                    if (data.design.qrDesign) {
+                        setQrDesign(prev => ({
+                            ...prev,
+                            ...data.design.qrDesign,
+                            // Ensure ID is a number if it exists
+                            selectedWalletId: data.design.qrDesign.selectedWalletId ? Number(data.design.qrDesign.selectedWalletId) : null,
+                            content: data.design.qrDesign.content || '',
+                            selectedCrypto: data.design.qrDesign.selectedCrypto || 'monero'
+                        }));
+                    }
+                    if (data.design.sonicDesign) {
+                        setSonicDesign(prev => ({
+                            ...prev,
+                            ...data.design.sonicDesign
+                        }));
+                    }
                     localStorage.setItem('goxmr_design', JSON.stringify(data.design));
                 }
             }
@@ -171,7 +200,8 @@ export const Dashboard: React.FC = () => {
             buttonColor,
             tags: designTags,
             activeProtocol,
-            qrDesign
+            qrDesign,
+            sonicDesign
         };
         try {
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -189,6 +219,7 @@ export const Dashboard: React.FC = () => {
             });
             if (res.ok) {
                 setIsDeploySuccess(true);
+                await fetchProfile(); // Refetch to get updated database IDs
                 setTimeout(() => setIsDeploySuccess(false), 3000);
             }
         } catch (e) {
@@ -212,7 +243,7 @@ export const Dashboard: React.FC = () => {
             console.error(e);
         }
     };
-    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'profile' | 'banner' | 'qr_logo') => {
+    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'profile' | 'banner' | 'qr_logo' | 'audio') => {
         const file = event.target.files?.[0];
         if (!file) return;
         const formData = new FormData();
@@ -230,6 +261,7 @@ export const Dashboard: React.FC = () => {
                 if (type === 'profile') setProfileImage(fullUrl);
                 else if (type === 'banner') setBannerImage(fullUrl);
                 else if (type === 'qr_logo') setQrDesign(prev => ({ ...prev, logoUrl: fullUrl }));
+                else if (type === 'audio') setMusicUrl(fullUrl);
             } else {
                 const errData = await res.json();
                 alert(`Upload failed: ${errData.error || 'Server Error'}`);
@@ -237,6 +269,43 @@ export const Dashboard: React.FC = () => {
         } catch (error) {
             console.error("Upload failed", error);
             alert("Upload failed. Check server logs.");
+        }
+    };
+    const removeMusic = async () => {
+        const token = localStorage.getItem('goxmr_token');
+        try {
+            const res = await fetch('/api/me/upload/audio', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setMusicUrl(null);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+    const handleUpdateHandle = async (currency: string) => {
+        const isEnabled = handleConfig.enabled_currencies.includes(currency);
+        const newCurrencies = isEnabled
+            ? handleConfig.enabled_currencies.filter(c => c !== currency)
+            : [...handleConfig.enabled_currencies, currency];
+
+        try {
+            const token = localStorage.getItem('goxmr_token');
+            const res = await fetch('/api/me/handle', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ enabled_currencies: newCurrencies })
+            });
+            if (res.ok) {
+                setHandleConfig({ enabled_currencies: newCurrencies });
+            }
+        } catch (err) {
+            console.error('Failed to update handle config', err);
         }
     };
     useEffect(() => {
@@ -361,6 +430,7 @@ export const Dashboard: React.FC = () => {
 
                             <input type="file" ref={fileInputRefBanner} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'banner')} />
                             <input type="file" ref={fileInputRefProfile} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'profile')} />
+                            <input type="file" ref={fileInputRefMusic} className="hidden" accept="audio/mpeg,audio/mp3" onChange={(e) => handleImageUpload(e, 'audio')} />
 
                             <div className="relative group">
                                 <div className="h-48 bg-gray-100 dark:bg-zinc-800 overflow-hidden relative">
@@ -370,7 +440,7 @@ export const Dashboard: React.FC = () => {
                                         <div className="w-full h-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center font-mono text-gray-400 text-xs">
                                             <div className="flex flex-col items-center gap-1">
                                                 <span>NO_BANNER_DETECTED</span>
-                                                <span className="text-[10px] opacity-50 uppercase mt-2">Recommended: 1500x500px</span>
+                                                <span className="text-[10px] opacity-50 uppercase mt-2">Recommended: 1500x500px (MAX 5MB for GIFs)</span>
                                             </div>
                                         </div>
                                     )}
@@ -396,7 +466,7 @@ export const Dashboard: React.FC = () => {
                                             ) : (
                                                 <div className="flex flex-col items-center justify-center h-full">
                                                     <Camera size={24} className="text-gray-400 mb-1" />
-                                                    <span className="text-[8px] text-gray-400 font-mono uppercase">512x512</span>
+                                                    <span className="text-[8px] text-gray-400 font-mono uppercase">512x512 GIF: &lt; 5MB</span>
                                                 </div>
                                             )}
                                         </div>
@@ -413,67 +483,6 @@ export const Dashboard: React.FC = () => {
                                             <div className="flex items-center gap-2">
                                                 <span className="font-mono font-bold text-lg dark:text-white">@{username}</span>
                                                 <div className="px-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] font-mono border border-green-200 dark:border-green-800">VERIFIED</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-gray-50 dark:bg-zinc-800/50 p-3 border border-gray-200 dark:border-zinc-700 font-mono">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <label className="text-[8px] font-black uppercase text-monero-orange">Wallet_Lookup_Handle</label>
-                                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                                            </div>
-                                            <div className="flex flex-col gap-3 overflow-hidden">
-                                                <div className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[7px] font-black text-gray-400 uppercase">Social_Handle</span>
-                                                        <div className="text-[10px] sm:text-xs truncate dark:text-white font-bold">
-                                                            <span className="text-monero-orange">@</span>{username}<span className="text-gray-400">@{(() => {
-                                                                const parts = window.location.hostname.split('.');
-                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                            })()}</span>
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            const rootDomain = (() => {
-                                                                const parts = window.location.hostname.split('.');
-                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                            })();
-                                                            navigator.clipboard.writeText(`@${username}@${rootDomain}`);
-                                                        }}
-                                                        className="text-[8px] font-black bg-monero-orange text-white px-2 py-1 hover:bg-black transition-colors"
-                                                    >
-                                                        COPY
-                                                    </button>
-                                                </div>
-
-                                                <div className="flex items-center justify-between gap-2 p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[7px] font-black text-gray-400 uppercase">Subdomain_Handle</span>
-                                                        <div className="text-[10px] sm:text-xs truncate dark:text-white font-bold">
-                                                            {username}<span className="text-gray-400">.{(() => {
-                                                                const parts = window.location.hostname.split('.');
-                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                            })()}</span>
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            const rootDomain = (() => {
-                                                                const parts = window.location.hostname.split('.');
-                                                                return parts.length > 2 && !window.location.hostname.includes('localhost') ? parts.slice(-2).join('.') : window.location.hostname;
-                                                            })();
-                                                            navigator.clipboard.writeText(`${username}.${rootDomain}`);
-                                                        }}
-                                                        className="text-[8px] font-black bg-monero-orange text-white px-2 py-1 hover:bg-black transition-colors"
-                                                    >
-                                                        COPY
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="mt-3 flex items-center gap-2">
-                                                <div className="flex-1 h-[1px] bg-gray-200 dark:bg-zinc-700"></div>
-                                                <span className="text-[8px] font-mono text-gray-400 uppercase">Universal_Lookup_Active</span>
-                                                <div className="flex-1 h-[1px] bg-gray-200 dark:bg-zinc-700"></div>
                                             </div>
                                         </div>
                                     </div>
@@ -502,6 +511,90 @@ export const Dashboard: React.FC = () => {
                                                 className="w-full bg-white dark:bg-zinc-800 border-2 border-black dark:border-white p-3 font-mono text-sm h-32 focus:bg-gray-50 dark:focus:bg-zinc-700 outline-none transition-colors resize-none dark:text-white placeholder-gray-400 dark:placeholder-gray-600"
                                             />
                                         </div>
+                                    </div>
+
+                                    {/* ADDRESS LOOKUP SERVICES */}
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center bg-black dark:bg-white text-white dark:text-black px-3 py-1.5 font-mono text-[9px] font-bold uppercase">
+                                            <span>Address Lookup Services</span>
+                                            <span className="text-green-500">LIVE</span>
+                                        </div>
+                                        <div className="border-2 border-dashed border-gray-200 dark:border-zinc-800 p-4 space-y-3 relative overflow-hidden group/lookup">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Globe size={14} className="text-monero-orange" />
+                                                <span className="font-mono text-[10px] font-black dark:text-white">@{username}@goxmr.click</span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {['XMR', 'BTC', 'ETH', 'LTC', 'USDT'].map(coin => {
+                                                    const hasWallet = wallets.some(w => w.currency === coin);
+                                                    const isEnabled = handleConfig.enabled_currencies.includes(coin);
+
+                                                    return (
+                                                        <button
+                                                            key={coin}
+                                                            disabled={!hasWallet}
+                                                            onClick={() => handleUpdateHandle(coin)}
+                                                            className={`flex items-center justify-between p-2 border transition-all text-left ${isEnabled
+                                                                ? 'border-monero-orange bg-monero-orange/5 text-monero-orange'
+                                                                : 'border-gray-200 dark:border-zinc-800 text-gray-400 dark:text-zinc-600 grayscale'
+                                                                } ${!hasWallet ? 'opacity-20 cursor-not-allowed' : 'hover:border-black dark:hover:border-white'}`}
+                                                        >
+                                                            <div className="flex flex-col">
+                                                                <span className="font-mono text-[8px] font-bold">{coin}</span>
+                                                                <span className="text-[7px] font-mono tracking-tighter">{isEnabled ? 'ACTIVE' : (hasWallet ? 'OFF' : 'MISSING')}</span>
+                                                            </div>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-monero-orange animate-pulse' : 'bg-gray-300 dark:bg-zinc-800'}`}></div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <p className="text-[8px] font-mono text-gray-400 leading-tight mt-2 italic">
+                                                * Encoded into your Mastodon-compatible profile for Cake Wallet resolution.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* SONIC PROFILE (MUSIC) */}
+                                    <div className="bg-white dark:bg-zinc-800/20 border-2 border-black dark:border-white p-3 space-y-3">
+                                        <div className="flex justify-between items-center bg-black dark:bg-white text-white dark:text-black px-3 py-1.5 font-mono text-[9px] font-bold uppercase">
+                                            <span>Sonic Module (Music)</span>
+                                            {musicUrl ? <span className="text-orange-500 animate-pulse">ACTIVE</span> : <span>DISABLED</span>}
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            {musicUrl ? (
+                                                <div className="space-y-2">
+                                                    <div className="text-[10px] font-mono bg-gray-50 dark:bg-zinc-800 p-2 break-all border border-black dark:border-white dark:text-gray-400">
+                                                        FILE: {musicUrl.split('/').pop()}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => fileInputRefMusic.current?.click()}
+                                                            className="flex-1 bg-black dark:bg-white text-white dark:text-black py-2 text-[10px] font-bold uppercase hover:opacity-80 transition-opacity border-2 border-transparent"
+                                                        >
+                                                            Replace
+                                                        </button>
+                                                        <button
+                                                            onClick={removeMusic}
+                                                            className="px-3 bg-red-600 text-white py-2 text-[10px] font-bold uppercase hover:bg-red-700 transition-colors"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => fileInputRefMusic.current?.click()}
+                                                    className="w-full bg-white dark:bg-zinc-900 text-black dark:text-white border-2 border-black dark:border-white py-3 text-xs font-bold uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <Music size={14} /> Upload Profile Clip
+                                                </button>
+                                            )}
+                                        </div>
+                                        <p className="text-[8px] font-mono text-gray-400 leading-tight mt-2 italic">
+                                            * MP3 format recommended. **Enforced 15-second loop cutoff** on public profile.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -600,6 +693,10 @@ export const Dashboard: React.FC = () => {
                             qrDesign={qrDesign}
                             onQrDesignChange={setQrDesign}
                             onUploadLogo={(e) => handleImageUpload(e, 'qr_logo')}
+                            selectedWalletId={qrDesign.selectedWalletId}
+                            onWalletChange={(id) => setQrDesign(prev => ({ ...prev, selectedWalletId: id }))}
+                            onContentChange={(v) => setQrDesign(prev => ({ ...prev, content: v }))}
+                            onCryptoChange={(v) => setQrDesign(prev => ({ ...prev, selectedCrypto: v }))}
                         />
                     </section>
                     { }
@@ -819,53 +916,112 @@ export const Dashboard: React.FC = () => {
                                                 + ADD_TAG
                                             </button>
                                         </div>
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center bg-black dark:bg-white text-white dark:text-black px-3 py-1.5 font-mono text-[9px] font-bold uppercase">
+                                                <span>Sonic Module (Music Visualizer)</span>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-1 h-1 bg-monero-orange animate-bounce"></div>
+                                                    <div className="w-1 h-1 bg-monero-orange animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                                    <div className="w-1 h-1 bg-monero-orange animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-mono font-bold text-xs uppercase text-gray-400">Audio Visualizer</h4>
+                                                    <button
+                                                        onClick={() => setSonicDesign(prev => ({ ...prev, useVisualizer: !prev.useVisualizer }))}
+                                                        className={`w-10 h-5 border-2 border-black dark:border-white relative transition-colors ${sonicDesign.useVisualizer ? 'bg-monero-orange' : 'bg-gray-200 dark:bg-zinc-800'}`}
+                                                    >
+                                                        <div className={`absolute top-0.5 w-3 h-3 border border-black dark:border-white bg-white dark:bg-zinc-900 transition-all ${sonicDesign.useVisualizer ? 'right-0.5' : 'left-0.5'}`}></div>
+                                                    </button>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-2">Accent</h4>
+                                                        <div className="flex gap-2 items-center">
+                                                            <input
+                                                                type="color"
+                                                                value={sonicDesign.color}
+                                                                onChange={(e) => setSonicDesign(prev => ({ ...prev, color: e.target.value }))}
+                                                                className="w-8 h-8 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={sonicDesign.color.toUpperCase()}
+                                                                onChange={(e) => setSonicDesign(prev => ({ ...prev, color: e.target.value }))}
+                                                                className="font-mono text-[10px] border-2 border-black dark:border-white p-1.5 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-mono font-bold text-xs uppercase text-gray-400 mb-2">Bars</h4>
+                                                        <div className="flex gap-2 items-center">
+                                                            <input
+                                                                type="color"
+                                                                value={sonicDesign.barColor}
+                                                                onChange={(e) => setSonicDesign(prev => ({ ...prev, barColor: e.target.value }))}
+                                                                className="w-8 h-8 border-2 border-black dark:border-white cursor-pointer bg-transparent rounded-none flex-shrink-0"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={sonicDesign.barColor.toUpperCase()}
+                                                                onChange={(e) => setSonicDesign(prev => ({ ...prev, barColor: e.target.value }))}
+                                                                className="font-mono text-[10px] border-2 border-black dark:border-white p-1.5 w-full outline-none focus:bg-gray-50 dark:focus:bg-zinc-700 uppercase dark:text-white dark:bg-zinc-800"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                { }
-                                <div className={`border-2 border-dashed border-gray-200 p-8 flex flex-col items-center justify-center relative overflow-hidden group/prev min-h-[420px] transition-all duration-500
+                                    { }
+                                    <div className={`border-2 border-dashed border-gray-200 p-8 flex flex-col items-center justify-center relative overflow-hidden group/prev min-h-[420px] transition-all duration-500
                                         ${activeProtocol === 'AMBER' ? 'theme-amber bg-[#0d0d0d]' : ''}
                                         ${activeProtocol === 'VOID' ? 'theme-void bg-black' : ''}
                                         ${activeProtocol === 'SHADOW' ? 'theme-shadow bg-[#010203]' : ''}
                                         ${activeProtocol === 'NEON' ? 'theme-neon bg-[#0a0015]' : ''}
                                         ${activeProtocol === 'DEFAULT' ? 'bg-gray-50' : ''}
                                     `}>
-                                    <div className="absolute top-2 left-2 font-mono text-[8px] text-gray-300">LIVE_PREVIEW_TARGET</div>
-                                    <div className="absolute inset-0 transition-colors" style={{ backgroundColor: pageColor, opacity: pageColor ? 1 : 0, zIndex: 0 }}></div>
-                                    <div className="w-full max-w-[280px] bg-white border-2 border-black p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative transition-all card-texture z-10"
-                                        style={{
-                                            backgroundColor: backgroundColor || '#ffffff',
-                                            borderColor: borderColor || '#000000',
-                                            boxShadow: `8px 8px 0px 0px ${accentColor}`
-                                        }}
-                                    >
-                                        <div className="absolute top-0 right-0 w-8 h-8 transition-colors" style={{ backgroundColor: accentColor, clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
-                                        <div className="flex flex-col items-center text-center">
-                                            <div className="w-20 h-20 rounded-full border-2 border-black mb-4 p-1 relative" style={{ borderColor: borderColor || '#000000' }}>
-                                                <div className="absolute inset-0 rounded-full border-2 animate-spin-slow" style={{ borderColor: accentColor, borderTopColor: 'transparent', borderRightColor: accentColor, borderBottomColor: accentColor, borderLeftColor: accentColor }}></div>
-                                                <div className="w-full h-full rounded-full bg-gray-100 overflow-hidden">
-                                                    <img src={profileImage || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"} alt="Profile" className="w-full h-full object-cover" />
+                                        <div className="absolute top-2 left-2 font-mono text-[8px] text-gray-300">LIVE_PREVIEW_TARGET</div>
+                                        <div className="absolute inset-0 transition-colors" style={{ backgroundColor: pageColor, opacity: pageColor ? 1 : 0, zIndex: 0 }}></div>
+                                        <div className="w-full max-w-[280px] bg-white border-2 border-black p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative transition-all card-texture z-10"
+                                            style={{
+                                                backgroundColor: backgroundColor || '#ffffff',
+                                                borderColor: borderColor || '#000000',
+                                                boxShadow: `8px 8px 0px 0px ${accentColor}`
+                                            }}
+                                        >
+                                            <div className="absolute top-0 right-0 w-8 h-8 transition-colors" style={{ backgroundColor: accentColor, clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}></div>
+                                            <div className="flex flex-col items-center text-center">
+                                                <div className="w-20 h-20 rounded-full border-2 border-black mb-4 p-1 relative" style={{ borderColor: borderColor || '#000000' }}>
+                                                    <div className="absolute inset-0 rounded-full border-2 animate-spin-slow" style={{ borderColor: accentColor, borderTopColor: 'transparent', borderRightColor: accentColor, borderBottomColor: accentColor, borderLeftColor: accentColor }}></div>
+                                                    <div className="w-full h-full rounded-full bg-gray-100 overflow-hidden">
+                                                        <img src={profileImage || "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png"} alt="Profile" className="w-full h-full object-cover" />
+                                                    </div>
+                                                </div>
+                                                <div className="font-mono font-black uppercase text-sm mb-1" style={{ color: textColor || borderColor || '#000000' }}>@{username.replace('@', '')}</div>
+                                                <div className="flex flex-wrap justify-center gap-1 mb-3">
+                                                    {designTags.slice(0, 3).map((t, i) => (
+                                                        <span key={i} className="text-[8px] px-1 py-0.5 text-white font-mono uppercase" style={{ backgroundColor: i === 0 ? accentColor : (borderColor || '#000'), color: i === 0 ? '#fff' : (textColor || '#fff') }}>{t}</span>
+                                                    ))}
+                                                </div>
+                                                <div className="w-full h-1 bg-gray-100 mb-3" style={{ backgroundColor: `${accentColor}20` }}></div>
+                                                <div className="w-full flex gap-1">
+                                                    <div className="flex-1 h-6 border border-black bg-gray-50 flex items-center justify-center font-mono text-[8px] uppercase group-hover/prev:bg-black group-hover/prev:text-white transition-colors"
+                                                        style={{
+                                                            borderColor: borderColor || '#000000',
+                                                            backgroundColor: buttonColor || 'transparent',
+                                                            color: buttonColor ? (textColor || '#fff') : 'inherit'
+                                                        }}>Join Signals</div>
                                                 </div>
                                             </div>
-                                            <div className="font-mono font-black uppercase text-sm mb-1" style={{ color: textColor || borderColor || '#000000' }}>@{username.replace('@', '')}</div>
-                                            <div className="flex flex-wrap justify-center gap-1 mb-3">
-                                                {designTags.slice(0, 3).map((t, i) => (
-                                                    <span key={i} className="text-[8px] px-1 py-0.5 text-white font-mono uppercase" style={{ backgroundColor: i === 0 ? accentColor : (borderColor || '#000'), color: i === 0 ? '#fff' : (textColor || '#fff') }}>{t}</span>
-                                                ))}
-                                            </div>
-                                            <div className="w-full h-1 bg-gray-100 mb-3" style={{ backgroundColor: `${accentColor}20` }}></div>
-                                            <div className="w-full flex gap-1">
-                                                <div className="flex-1 h-6 border border-black bg-gray-50 flex items-center justify-center font-mono text-[8px] uppercase group-hover/prev:bg-black group-hover/prev:text-white transition-colors"
-                                                    style={{
-                                                        borderColor: borderColor || '#000000',
-                                                        backgroundColor: buttonColor || 'transparent',
-                                                        color: buttonColor ? (textColor || '#fff') : 'inherit'
-                                                    }}>Join Signals</div>
-                                            </div>
                                         </div>
+                                        <p className="mt-8 font-mono text-[10px] text-gray-400 text-center max-w-[200px]">
+                                            Real-time visual abstraction of your public profile deployment.
+                                        </p>
                                     </div>
-                                    <p className="mt-8 font-mono text-[10px] text-gray-400 text-center max-w-[200px]">
-                                        Real-time visual abstraction of your public profile deployment.
-                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -880,6 +1036,8 @@ export const Dashboard: React.FC = () => {
                             hasRecovery={hasRecovery}
                             hasPgp={hasPgp}
                             pgpKey={pgpKey}
+                            handleConfig={handleConfig}
+                            onUpdateHandle={setHandleConfig}
                         />
                     </section>
                 </div>

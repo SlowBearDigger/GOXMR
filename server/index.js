@@ -599,20 +599,7 @@ app.delete('/api/me/upload/audio', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Failed to remove music' });
     }
 });
-app.get('/api/debug/tx', async (req, res) => {
-    const { username, txid } = req.query;
-    if (!username || !txid) return res.status(400).json({ error: "Missing username or txid" });
 
-    try {
-        const user = await dbGet('SELECT id FROM users WHERE username = ? COLLATE NOCASE', [username]);
-        if (!user) return res.status(404).json({ error: "User not found" });
-
-        const result = await moneroMonitor.debugCheck(user.id, txid);
-        res.json(result);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
 // PGP AUTH ENDPOINTS
 app.post('/api/pgp/challenge', async (req, res) => {
     try {

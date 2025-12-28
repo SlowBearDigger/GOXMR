@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Menu, X, Sun, Moon, QrCode, ChevronDown, Wrench } from 'lucide-react';
 import { DonationGoal } from './DonationGoal';
 import { PriceTicker } from './PriceTicker';
@@ -18,14 +19,32 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginClick, onRegisterClick, onLogoutClick, theme, onThemeToggle, activeSection, onNavigate }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isToolsOpen, setIsToolsOpen] = useState(false);
+    const navigate = useNavigate();
 
     const handleNavClick = (section: 'home' | 'learn' | 'guide' | 'tools') => {
         if (onNavigate) {
             onNavigate(section);
-            window.history.pushState(null, '', '/'); // Ensure URL stays clean
+            // If we are not on root, go to root?
+            // Actually, LandingPage is at /, Dashboard is at /dashboard.
+            // But if we are in Dashboard, and click Home/Learn/Guide/Tools, we might want to stay in Dashboard?
+            // User requirement: "Command Center... me manda a home".
+            // Command Center should go to /dashboard.
+            // Home/Learn/Guide/Tools seem to be sections of LandingPage OR Dashboard?
+            // App.tsx shows Dashboard renders Learn/Guide/Tools if activeSection is set.
+            // So if logged in and on dashboard, clicking Learn should update activeSection.
+            // If we want to navigate 'home', usually means Landing Page?
+            // But if logged in, maybe Dashboard Home?
+            // Let's assume Nav clicks stay on current view context or go to / if not logged in.
+            // For now, let's just make sure URL is clean.
+            navigate(isLoggedIn ? '/dashboard' : '/');
         } else {
-            window.location.href = '/';
+            navigate('/');
         }
+    };
+
+    const handleDashboardClick = () => {
+        if (onNavigate) onNavigate('home');
+        navigate('/dashboard');
     };
 
     const navItems = [
@@ -77,12 +96,12 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
                     <div className="flex items-center gap-2">
                         {isLoggedIn ? (
                             <div className="flex items-center gap-2">
-                                <a
-                                    href="/dashboard"
+                                <button
+                                    onClick={handleDashboardClick}
                                     className="hidden sm:flex bg-black dark:bg-white text-white dark:text-black font-mono font-bold text-[10px] px-3 py-2 border-2 border-black dark:border-white hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-all uppercase items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] hover:translate-y-1 hover:shadow-none"
                                 >
                                     COMMAND CENTER
-                                </a>
+                                </button>
                                 <a
                                     href={`/${username}`}
                                     className="hidden sm:flex bg-monero-orange text-white font-mono font-bold text-[10px] px-3 py-2 border-2 border-black dark:border-white hover:bg-black dark:hover:bg-white dark:hover:text-black transition-all uppercase items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] hover:translate-y-1 hover:shadow-none"

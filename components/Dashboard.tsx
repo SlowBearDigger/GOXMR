@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music, Lock } from 'lucide-react';
+import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music, Lock, Wrench, Clock } from 'lucide-react';
 import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
 import { DashboardNav } from './DashboardNav';
@@ -118,6 +118,42 @@ export const Dashboard: React.FC = () => {
             ]);
             if (sigRes.ok) setUserSignals(await sigRes.json());
             if (dropRes.ok) setUserDrops(await dropRes.json());
+        } catch (e) { console.error(e); }
+    };
+
+    const editSignal = async (id: number, currentUrl: string) => {
+        const newUrl = window.prompt("Update Target URL:", currentUrl);
+        if (!newUrl || newUrl === currentUrl) return;
+
+        const token = localStorage.getItem('goxmr_token');
+        try {
+            const res = await fetch(`/api/me/signals/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ original_url: newUrl })
+            });
+            if (res.ok) fetchUserContent();
+        } catch (e) { console.error(e); }
+    };
+
+    const extendDrop = async (id: number) => {
+        const hours = window.prompt("Extend expiry by hours (e.g. 24):", "24");
+        if (!hours || isNaN(Number(hours))) return;
+
+        const token = localStorage.getItem('goxmr_token');
+        try {
+            const res = await fetch(`/api/me/drops/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ extendHours: Number(hours) })
+            });
+            if (res.ok) fetchUserContent();
         } catch (e) { console.error(e); }
     };
 
@@ -697,7 +733,7 @@ export const Dashboard: React.FC = () => {
                                     </div>
                                 ))}
                                 <button onClick={addLink} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
-                                    <Plus size={14} /> ADD SIGNAL
+                                    <Plus size={14} /> ADD PROFILE LINK
                                 </button>
                             </div>
                         </div>
@@ -772,9 +808,14 @@ export const Dashboard: React.FC = () => {
                             <div className="p-4 flex-1 space-y-8">
                                 {/* Signals Manager */}
                                 <div>
-                                    <h4 className="font-mono font-black text-[10px] uppercase mb-4 flex items-center gap-2 dark:text-white">
-                                        <LinkIcon size={12} className="text-monero-orange" /> Active Signals
-                                    </h4>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
+                                            <LinkIcon size={12} className="text-monero-orange" /> Active Signals
+                                        </h4>
+                                        <a href="/tools" className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
+                                            + Create Signal
+                                        </a>
+                                    </div>
                                     <div className="space-y-2">
                                         {userSignals.length === 0 ? (
                                             <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
@@ -794,9 +835,14 @@ export const Dashboard: React.FC = () => {
                                                             {sig.expires_at && <span className="text-yellow-500">Expires: {new Date(sig.expires_at).toLocaleDateString()}</span>}
                                                         </div>
                                                     </div>
-                                                    <button onClick={() => deleteSignal(sig.id)} className="text-gray-400 hover:text-red-500 p-1 opacity-100 transition-opacity">
-                                                        <Trash2 size={14} />
-                                                    </button>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => editSignal(sig.id, sig.original_url)} className="text-gray-400 hover:text-blue-500 p-1 transition-colors" title="Edit Target URL">
+                                                            <Wrench size={14} />
+                                                        </button>
+                                                        <button onClick={() => deleteSignal(sig.id)} className="text-gray-400 hover:text-red-500 p-1 transition-colors" title="Delete Signal">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ))
                                         )}
@@ -805,9 +851,14 @@ export const Dashboard: React.FC = () => {
 
                                 {/* Drops Manager */}
                                 <div>
-                                    <h4 className="font-mono font-black text-[10px] uppercase mb-4 flex items-center gap-2 dark:text-white">
-                                        <Lock size={12} className="text-monero-orange" /> Dead Drops
-                                    </h4>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
+                                            <Lock size={12} className="text-monero-orange" /> Dead Drops
+                                        </h4>
+                                        <a href="/tools" className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
+                                            + Create Drop
+                                        </a>
+                                    </div>
                                     <div className="space-y-2">
                                         {userDrops.length === 0 ? (
                                             <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
@@ -826,9 +877,14 @@ export const Dashboard: React.FC = () => {
                                                             {drop.burn_after_read === 1 && <span className="text-red-500 font-black">BURN_AFTER_READ</span>}
                                                         </div>
                                                     </div>
-                                                    <button onClick={() => deleteDrop(drop.id)} className="text-gray-400 hover:text-red-500 p-1 opacity-100 transition-opacity">
-                                                        <Trash2 size={14} />
-                                                    </button>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => extendDrop(drop.id)} className="text-gray-400 hover:text-green-500 p-1 transition-colors" title="Extend Expiration">
+                                                            <Clock size={14} />
+                                                        </button>
+                                                        <button onClick={() => deleteDrop(drop.id)} className="text-gray-400 hover:text-red-500 p-1 transition-colors" title="Burn/Delete Drop">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ))
                                         )}

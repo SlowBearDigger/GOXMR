@@ -92,7 +92,7 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                         {/* Right: Info & Address */}
                         <div className="flex-1 space-y-4">
                             <p className="text-[11px] font-mono font-bold text-gray-500 dark:text-gray-400 leading-tight uppercase">
-                                To activate lifetime premium status, send any amount of XMR to your unique subaddress.
+                                To activate lifetime premium status, send &gt; 0.001 XMR to your unique subaddress.
                                 <br /><span className="text-monero-orange">Activation is automatic after 1 confirmation (~2 min).</span>
                             </p>
 

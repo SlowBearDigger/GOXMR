@@ -351,7 +351,8 @@ export const LoginForm = ({ onSuccess }) => {
                     body: JSON.stringify({
                         body: authResp,
                         username,
-                        challengeKey: challengeKey
+                        challengeKey: challengeKey,
+                        altcha: altchaPayload
                     })
                 });
                 const verificationJSON = await verificationResp.json();
@@ -399,7 +400,7 @@ export const LoginForm = ({ onSuccess }) => {
                 const resp = await fetch('/api/pgp/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, signature: pgpSignature })
+                    body: JSON.stringify({ username, signature: pgpSignature, altcha: altchaPayload })
                 });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Verification failed');
@@ -492,7 +493,10 @@ export const LoginForm = ({ onSuccess }) => {
                     <div className="flex flex-col items-center gap-3">
                         <div
                             className="w-20 h-20 border-2 border-black dark:border-white rounded-2xl flex items-center justify-center bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer transition-all hover:scale-105 active:scale-95 group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]"
-                            onClick={() => handleLogin('hardware', 'platform')}
+                            onClick={() => {
+                                if (!altchaPayload) { showAlert('Security Check', 'Please solve the captcha first.'); return; }
+                                handleLogin('hardware', 'platform');
+                            }}
                         >
                             <Fingerprint size={40} className="group-hover:text-monero-orange transition-colors dark:text-white" />
                         </div>
@@ -501,7 +505,10 @@ export const LoginForm = ({ onSuccess }) => {
                     <div className="flex flex-col items-center gap-3">
                         <div
                             className="w-20 h-20 border-2 border-black dark:border-white rounded-2xl flex items-center justify-center bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer transition-all hover:scale-105 active:scale-95 group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]"
-                            onClick={() => handleLogin('hardware', 'cross-platform')}
+                            onClick={() => {
+                                if (!altchaPayload) { showAlert('Security Check', 'Please solve the captcha first.'); return; }
+                                handleLogin('hardware', 'cross-platform');
+                            }}
                         >
                             <Usb size={40} className="group-hover:text-monero-orange transition-colors dark:text-white" />
                         </div>
@@ -517,6 +524,9 @@ export const LoginForm = ({ onSuccess }) => {
                 >
                     Cancel Protocol
                 </button>
+                <div className="mt-4 w-full">
+                    <AltchaWidget onVerify={setAltchaPayload} />
+                </div>
             </div>
         );
     }
@@ -550,12 +560,18 @@ export const LoginForm = ({ onSuccess }) => {
                     />
                 </div>
 
-                <button onClick={() => handleLogin('pgp_verify')} className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-3 uppercase hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-colors flex justify-center items-center gap-2 mb-3">
+                <button onClick={() => {
+                    if (!altchaPayload) { showAlert('Security Check', 'Please solve the captcha first.'); return; }
+                    handleLogin('pgp_verify');
+                }} className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-3 uppercase hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-colors flex justify-center items-center gap-2 mb-3">
                     Verify Proof <ArrowRight size={16} />
                 </button>
                 <button onClick={() => { setMode('default'); setPgpChallenge(''); }} className="w-full py-2 text-xs font-bold uppercase text-gray-400 dark:text-zinc-600 hover:text-black dark:hover:text-white">
                     Back to Terminal
                 </button>
+                <div className="mt-4 w-full">
+                    <AltchaWidget onVerify={setAltchaPayload} />
+                </div>
             </div>
         );
     }

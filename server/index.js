@@ -610,7 +610,7 @@ app.post('/api/pgp/challenge', async (req, res) => {
 
 const openpgp = require('openpgp');
 
-app.post('/api/pgp/verify', async (req, res) => {
+app.post('/api/pgp/verify', verifyAltcha, async (req, res) => {
     try {
         const { username, signature } = req.body;
         if (!username || !signature) return res.status(400).json({ error: 'Missing credentials' });
@@ -829,6 +829,23 @@ app.delete('/api/me/signals/:id', authenticateToken, async (req, res) => {
     }
 });
 
+app.put('/api/me/signals/:id', authenticateToken, async (req, res) => {
+    try {
+        const { original_url } = req.body;
+        if (!original_url) return res.status(400).json({ error: 'URL required' });
+
+        // Verify ownership
+        const signal = await dbGet('SELECT id FROM signals WHERE id = ? AND user_id = ?', [req.params.id, req.user.userId]);
+        if (!signal) return res.status(404).json({ error: 'Signal not found' });
+
+        await dbRun('UPDATE signals SET original_url = ? WHERE id = ?', [original_url, req.params.id]);
+        res.json({ message: 'Signal updated' });
+    } catch (err) {
+        console.error('Update signal error:', err);
+        res.status(500).json({ error: 'Failed to update signal' });
+    }
+});
+
 app.get('/api/me/drops', authenticateToken, async (req, res) => {
     try {
         const drops = await dbAll('SELECT id, drop_code, encryption_method, burn_after_read, created_at, expires_at FROM drops WHERE user_id = ? ORDER BY created_at DESC', [req.user.userId]);
@@ -845,6 +862,26 @@ app.delete('/api/me/drops/:id', authenticateToken, async (req, res) => {
         res.json({ message: 'Drop deleted' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to delete drop' });
+    }
+});
+
+app.put('/api/me/drops/:id', authenticateToken, async (req, res) => {
+    try {
+        const { extendHours } = req.body;
+        if (!extendHours) return res.status(400).json({ error: 'Extension duration required' });
+
+        // Verify ownership
+        const drop = await dbGet('SELECT id, expires_at FROM drops WHERE id = ? AND user_id = ?', [req.params.id, req.user.userId]);
+        if (!drop) return res.status(404).json({ error: 'Drop not found' });
+
+        const currentExpiry = new Date(drop.expires_at || Date.now());
+        const newExpiry = new Date(currentExpiry.getTime() + (extendHours * 60 * 60 * 1000)).toISOString();
+
+        await dbRun('UPDATE drops SET expires_at = ? WHERE id = ?', [newExpiry, req.params.id]);
+        res.json({ message: 'Drop extended', expiresAt: newExpiry });
+    } catch (err) {
+        console.error('Update drop error:', err);
+        res.status(500).json({ error: 'Failed to update drop' });
     }
 });
 
@@ -936,7 +973,7 @@ app.get('/api/webauthn/register-options', authenticateToken, async (req, res) =>
         res.status(500).json({ error: 'Failed to generate registration options' });
     }
 });
-app.post('/api/webauthn/register-verify', authenticateToken, async (req, res) => {
+app.post('/api/webauthn/register-verify', authenticateToken, verifyAltcha, async (req, res) => {
     try {
         const userId = req.user.userId;
         const { body, authenticatorAttachment } = req.body;
@@ -1010,7 +1047,7 @@ app.get('/api/webauthn/auth-options', async (req, res) => {
         res.status(500).json({ error: 'Failed to generate auth options' });
     }
 });
-app.post('/api/webauthn/auth-verify', async (req, res) => {
+app.post('/api/webauthn/auth-verify', verifyAltcha, async (req, res) => {
     try {
         const { body, username, challengeKey } = req.body;
         console.log('[DEBUG] Auth Verify Request:', {

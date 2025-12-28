@@ -144,6 +144,7 @@ const App: React.FC = () => {
                                         <Dashboard />
                         ) : <Navigate to="/" />
                     } />
+                    <Route path="/Dashboard" element={<Navigate to="/dashboard" replace />} />
                 </Route>
 
                 {/* Public Profile (No Header/Footer, No Global Dark Mode) */}

@@ -196,6 +196,7 @@ class MoneroMonitor {
         let txid = 'unknown';
         let amount = 0;
         let confs = 0;
+        let height = 0;
 
         try {
             // 1. Extract TXID
@@ -213,11 +214,14 @@ class MoneroMonitor {
 
             amount = parseFloat(rawAmount.toString()) / 1e12;
 
-            // 3. Extract Confirmations
+            // 3. Extract Confirmations & Height
             if (typeof t.getNumConfirmations === 'function') confs = t.getNumConfirmations();
             else if (typeof t.getConfirmations === 'function') confs = t.getConfirmations();
             else if (t.numConfirmations !== undefined) confs = t.numConfirmations;
             else if (t.confirmations !== undefined) confs = t.confirmations;
+
+            if (typeof t.getHeight === 'function') height = t.getHeight();
+            else if (t.height !== undefined) height = t.height;
 
             // Fallback: Check isConfirmed boolean
             if (confs === 0 || confs === undefined) {
@@ -229,7 +233,7 @@ class MoneroMonitor {
             console.error("Error parsing transfer object:", e);
         }
 
-        return { txid, amount, confs };
+        return { txid, amount, confs, height };
     }
 
     async checkPaymentByTxid(userId, txidInput) {
@@ -269,13 +273,27 @@ class MoneroMonitor {
                 matchData = await findTransfer();
             } catch (err) {
                 console.error("[MONERO] Force sync failed (might be already syncing):", err.message);
-                // If sync failed, we stick with what we have
             }
         }
 
         if (!matchData) {
             console.log(`[MONERO] TXID ${targetTxid} strictly not found after sync.`);
             return { found: false };
+        }
+
+        // 4. MANUAL CONFIRMATION CALCULATION OVERRIDE
+        if (matchData.confs < 1 && matchData.height > 0) {
+            try {
+                const daemonHeight = await this.wallet.getDaemonHeight();
+                console.log(`[MONERO] Manual Conf Check: TxHeight ${matchData.height}, DaemonHeight ${daemonHeight}`);
+                if (daemonHeight >= matchData.height) {
+                    const calculatedConfs = (daemonHeight - matchData.height) + 1;
+                    console.log(`[MONERO] Overriding 0 confs with calculated: ${calculatedConfs}`);
+                    matchData.confs = calculatedConfs;
+                }
+            } catch (e) {
+                console.error('[MONERO] Failed to get daemon height for manual check:', e);
+            }
         }
 
         console.log(`[MONERO] Found TXID! Amount: ${matchData.amount}, Confs: ${matchData.confs}`);
@@ -288,7 +306,7 @@ class MoneroMonitor {
             return { found: true, valid: false, reason: 'Transaction pending (0 confirmations)' };
         }
 
-        // 4. Activate Premium
+        // 5. Activate Premium
         await new Promise((res) => {
             db.run('UPDATE users SET is_premium = 1, premium_activated_at = CURRENT_TIMESTAMP WHERE id = ?', [userId], () => res());
         });

@@ -37,8 +37,6 @@ interface QrFormProps {
     codeSnippet: string;
     qrSize: number; onQrSizeChange: (v: number) => void;
     onDetectAndSetCrypto: (text: string) => string | null;
-    isDisposable: boolean; onIsDisposableChange: (v: boolean) => void;
-    disposableTimeout: number; onDisposableTimeoutChange: (v: number) => void;
 }
 
 const AccordionSection: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; isOpen: boolean; onToggle: () => void; }> = ({ title, icon, children, isOpen, onToggle }) => (
@@ -67,8 +65,7 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
         onLogoChange, color, onColorChange, shape, onShapeChange, cornerType, onCornerChange,
         backgroundColor, onBackgroundColorChange, useGradient, onUseGradientChange, gradientColor, onGradientColorChange, gradientType, onGradientTypeChange,
         presets, onApplyPreset, onRandomize, activePreset, cryptoOptions, selectedCrypto, onCryptoChange,
-        codeSnippet, qrSize, onQrSizeChange, onDetectAndSetCrypto, onVerifyClick,
-        isDisposable, onIsDisposableChange, disposableTimeout, onDisposableTimeoutChange
+        codeSnippet, qrSize, onQrSizeChange, onDetectAndSetCrypto, onVerifyClick
     } = props;
 
     const currentCrypto = cryptoOptions.find(c => c.id === selectedCrypto);
@@ -294,20 +291,7 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
                         </div>
                     </div>
 
-                    <div className="pt-4 border-t-2 border-black dark:border-zinc-800">
-                        <label className="flex items-center justify-between cursor-pointer group">
-                            <div className="flex items-center gap-2">
-                                <input type="checkbox" checked={isDisposable} onChange={(e) => onIsDisposableChange(e.target.checked)} className="w-4 h-4 accent-red-600" />
-                                <span className="text-xs font-black uppercase group-hover:text-red-600 transition-colors dark:text-white">AUTO_DESTRUCT_PROTOCOL</span>
-                            </div>
-                            {isDisposable && (
-                                <div className="flex items-center bg-black text-white px-2 py-1">
-                                    <input type="number" min="10" max="300" value={disposableTimeout} onChange={(e) => onDisposableTimeoutChange(parseInt(e.target.value))} className="bg-transparent text-right w-12 text-xs font-bold outline-none" />
-                                    <span className="text-[10px] font-black ml-1 text-monero-orange">SEC</span>
-                                </div>
-                            )}
-                        </label>
-                    </div>
+
                 </div>
             </AccordionSection>
 

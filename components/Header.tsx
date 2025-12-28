@@ -49,16 +49,19 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
                     <span className="font-mono font-bold text-xl tracking-tighter hidden md:inline dark:text-white uppercase transition-colors">GOXMR</span>
                 </div>
 
-                {/* Center Section: Ticker (Desktop Only) */}
-                <div className="hidden lg:flex absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 items-center justify-center">
-                    <DonationGoal />
+                {/* Center Section: Ticker & Goal (Desktop Only) */}
+                <div className="hidden xl:flex flex-1 items-center justify-center gap-4 px-4 overflow-hidden">
+                    <div className="flex items-center gap-4 bg-gray-50 dark:bg-zinc-900/50 border-2 border-black/10 dark:border-white/10 px-4 py-2 shadow-inner">
+                        <DonationGoal />
+                        <div className="w-[1px] h-6 bg-black/10 dark:bg-white/10" />
+                        <PriceTicker />
+                    </div>
                 </div>
 
-                {/* Right Section: Navigation & Theme Toggle */}
+                {/* Right Section: Navigation & Auth */}
                 <div className="flex items-center gap-4 z-20">
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center gap-6 mr-2">
-                        <PriceTicker />
                         {navItems.map(item => (
                             <button
                                 key={item.name}

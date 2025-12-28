@@ -8,7 +8,7 @@ const PRESETS: Preset[] = [
     {
         name: 'Monero Default',
         description: 'Classic Monero Orange',
-        config: {
+        options: {
             color: '#F26822',
             shape: 'square',
             cornerType: 'square',
@@ -21,7 +21,7 @@ const PRESETS: Preset[] = [
     {
         name: 'Dark Mode',
         description: 'Stealth Style',
-        config: {
+        options: {
             color: '#FFFFFF',
             shape: 'dots',
             cornerType: 'extra-rounded',
@@ -34,7 +34,7 @@ const PRESETS: Preset[] = [
     {
         name: 'Cyberpunk',
         description: 'Neon Vibes',
-        config: {
+        options: {
             color: '#00FF00',
             shape: 'classy',
             cornerType: 'dot',
@@ -63,6 +63,8 @@ interface QrGeneratorProps {
         gradientType: GradientType;
         logoUrl: string | null;
         amount: string;
+        content?: string;
+        selectedCrypto?: CryptoType;
     };
     onQrDesignChange: (design: any) => void;
     onUploadLogo: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -84,8 +86,6 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({
     const [message, setMessage] = useState('');
     const [canvasSize, setCanvasSize] = useState(300);
 
-    const [isDisposable, setIsDisposable] = useState(false);
-    const [disposableTimeout, setDisposableTimeout] = useState(60);
     const [qrInstance, setQrInstance] = useState<QRCodeStyling | null>(null);
     const [isGenerated, setIsGenerated] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -201,13 +201,13 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({
     const applyPreset = (p: Preset) => {
         onQrDesignChange({
             ...qrDesign,
-            color: p.config.color,
-            shape: p.config.shape,
-            cornerType: p.config.cornerType,
-            useGradient: p.config.useGradient,
-            gradientColor: p.config.gradientColor,
-            gradientType: p.config.gradientType,
-            backgroundColor: p.config.backgroundColor
+            color: p.options.color,
+            shape: p.options.shape,
+            cornerType: p.options.cornerType,
+            useGradient: p.options.useGradient,
+            gradientColor: p.options.gradientColor,
+            gradientType: p.options.gradientType,
+            backgroundColor: p.options.backgroundColor
         });
     };
     const detectCrypto = (text: string) => {
@@ -262,8 +262,8 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({
                         if (type) setSelectedCrypto(type as CryptoType);
                         return type;
                     }}
-                    isDisposable={isDisposable} onIsDisposableChange={setIsDisposable}
-                    disposableTimeout={disposableTimeout} onDisposableTimeoutChange={setDisposableTimeout}
+                    isDisposable={false} onIsDisposableChange={() => { }}
+                    disposableTimeout={60} onDisposableTimeoutChange={() => { }}
                 />
             </div>
             <div className="lg:col-span-5 relative">
@@ -272,8 +272,8 @@ export const QrGenerator: React.FC<QrGeneratorProps> = ({
                     isGenerated={isGenerated}
                     isLoading={isLoading}
                     onDownload={handleDownload}
-                    countdown={disposableTimeout}
-                    isDisposable={isDisposable}
+                    countdown={0}
+                    isDisposable={false}
                     qrInstance={qrInstance}
                 />
             </div>

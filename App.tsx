@@ -11,6 +11,38 @@ import { LoginForm, RegisterForm } from './components/AuthForms';
 import { Guide } from './components/Guide';
 import { LearnMonero } from './components/LearnMonero';
 
+const MainLayout: React.FC<{
+    isLoggedIn: boolean;
+    username: string | null;
+    setIsLoginOpen: (v: boolean) => void;
+    setIsRegisterOpen: (v: boolean) => void;
+    handleLogout: () => void;
+    theme: 'light' | 'dark';
+    toggleTheme: () => void;
+    activeSection: 'home' | 'learn' | 'guide' | 'tools';
+    setActiveSection: (section: 'home' | 'learn' | 'guide' | 'tools') => void;
+}> = ({ isLoggedIn, username, setIsLoginOpen, setIsRegisterOpen, handleLogout, theme, toggleTheme, activeSection, setActiveSection }) => {
+    return (
+        <div className="min-h-screen flex flex-col pt-16 md:pt-20">
+            <Header
+                isLoggedIn={isLoggedIn}
+                username={username || ''}
+                onLoginClick={() => setIsLoginOpen(true)}
+                onRegisterClick={() => setIsRegisterOpen(true)}
+                onLogoutClick={handleLogout}
+                theme={theme}
+                onThemeToggle={toggleTheme}
+                activeSection={activeSection}
+                onNavigate={setActiveSection}
+            />
+            <main className="flex-grow">
+                <Outlet context={{ activeSection, setActiveSection }} />
+            </main>
+            <Footer />
+        </div>
+    );
+};
+
 const App: React.FC = () => {
     const [isLoggedIn, setUserLoggedIn] = useState(false);
     const [username, setUsername] = useState<string | null>(null);
@@ -18,6 +50,7 @@ const App: React.FC = () => {
     const [isLoginOpen, setIsLoginOpen] = useState(false);
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
     const [initialRegisterUsername, setInitialRegisterUsername] = useState('');
+    const [activeSection, setActiveSection] = useState<'home' | 'learn' | 'guide' | 'tools'>('home');
 
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         const saved = localStorage.getItem('goxmr_theme');
@@ -77,35 +110,25 @@ const App: React.FC = () => {
         </div>
     );
 
-    const MainLayout = () => {
-        const [activeSection, setActiveSection] = useState<'home' | 'learn' | 'guide'>('home');
-
-        return (
-            <div className="min-h-screen flex flex-col pt-16 md:pt-20">
-                <Header
-                    isLoggedIn={isLoggedIn}
-                    username={username || ''}
-                    onLoginClick={() => setIsLoginOpen(true)}
-                    onRegisterClick={() => setIsRegisterOpen(true)}
-                    onLogoutClick={handleLogout}
-                    theme={theme}
-                    onThemeToggle={toggleTheme}
-                    activeSection={activeSection}
-                    onNavigate={setActiveSection}
-                />
-                <main className="flex-grow">
-                    <Outlet context={{ activeSection, setActiveSection }} />
-                </main>
-                <Footer />
-            </div>
-        );
-    };
-
     return (
         <div className={theme === 'dark' ? 'dark' : ''}>
             <Routes>
                 {/* Routes with Header & Footer and Dark Mode support */}
-                <Route element={<AppLayout><MainLayout /></AppLayout>}>
+                <Route element={
+                    <AppLayout>
+                        <MainLayout
+                            isLoggedIn={isLoggedIn}
+                            username={username}
+                            setIsLoginOpen={setIsLoginOpen}
+                            setIsRegisterOpen={setIsRegisterOpen}
+                            handleLogout={handleLogout}
+                            theme={theme}
+                            toggleTheme={toggleTheme}
+                            activeSection={activeSection}
+                            setActiveSection={setActiveSection}
+                        />
+                    </AppLayout>
+                }>
                     <Route path="/" element={
                         isLoggedIn ? <Navigate to="/dashboard" /> : <LandingPage onOpenRegister={handleOpenRegister} />
                     } />

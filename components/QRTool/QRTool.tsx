@@ -61,9 +61,6 @@ export const QRTool: React.FC = () => {
     const [activePreset, setActivePreset] = useState<string | null>(null);
     const [codeSnippet, setCodeSnippet] = useState<string>('');
     const [qrSize, setQrSize] = useState<number>(300);
-    const [isDisposable, setIsDisposable] = useState<boolean>(false);
-    const [disposableTimeout, setDisposableTimeout] = useState<number>(60);
-    const [countdown, setCountdown] = useState<number>(0);
 
     const qrRef = useRef<HTMLDivElement>(null);
     const invoiceRef = useRef<HTMLDivElement>(null);
@@ -74,16 +71,6 @@ export const QRTool: React.FC = () => {
     const debouncedStyle = useDebounce({
         color, shape, cornerType, backgroundColor, useGradient, gradientColor, gradientType, logo, label, message, amount, selectedCrypto, qrSize, invoiceMode
     }, 300);
-
-    useEffect(() => {
-        let timer: NodeJS.Timeout;
-        if (content && isDisposable && countdown > 0) {
-            timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-        } else if (countdown === 0 && isDisposable && content) {
-            if (qrRef.current) qrRef.current.innerHTML = '';
-        }
-        return () => clearTimeout(timer);
-    }, [countdown, isDisposable, content]);
 
     const buildQrData = useCallback(() => {
         if (!content) return 'https://goxmr.click';
@@ -147,12 +134,10 @@ export const QRTool: React.FC = () => {
                 qrInstance.append(qrRef.current);
             }
 
-            if (isDisposable) setCountdown(disposableTimeout);
-
         } catch (err) {
             console.error("QR Gen Error", err);
         }
-    }, [debouncedContent, debouncedStyle, qrInstance, isDisposable, disposableTimeout, invoiceMode, buildQrOptions]);
+    }, [debouncedContent, debouncedStyle, qrInstance, invoiceMode, buildQrOptions]);
 
     const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -192,56 +177,54 @@ export const QRTool: React.FC = () => {
     }, []);
 
     const handleDownload = async (extension: 'png' | 'svg' | 'pdf') => {
-        if (!qrInstance && !invoiceMode) return;
+        if (!qrInstance && !invoiceMode) {
+            console.error("Download failed: No QR instance or invoice mode");
+            return;
+        }
 
-        if (invoiceMode && invoiceRef.current) {
-            try {
+        try {
+            if (invoiceMode && invoiceRef.current) {
+                // Ensure all images are loaded
+                const images = Array.from(invoiceRef.current.querySelectorAll('img')) as HTMLImageElement[];
+                await Promise.all(images.map(img => {
+                    if (img.complete) return Promise.resolve();
+                    return new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                    });
+                }));
+
                 const canvas = await html2canvas(invoiceRef.current, {
-                    backgroundColor: null,
-                    scale: 2,
-                    useCORS: true
+                    backgroundColor: '#FFFFFF', // Force white background for invoices
+                    scale: 3, // Higher quality
+                    useCORS: true,
+                    logging: false,
+                    allowTaint: true,
+                    onclone: (clonedDoc) => {
+                        // Source is now sanitized via inline styles.
+                        // Minimal fallback just in case.
+                        const style = clonedDoc.createElement('style');
+                        style.innerHTML = `body { background-color: #FFFFFF !important; }`;
+                        clonedDoc.head.appendChild(style);
+                    }
                 });
 
                 const imgData = canvas.toDataURL('image/png');
 
-                if (extension === 'pdf') {
-                    const pdf = new jsPDF({
-                        orientation: 'portrait',
-                        unit: 'px',
-                        format: [canvas.width, canvas.height]
-                    });
-                    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                    pdf.save(`GoXMR-Invoice-${invoiceNumber || 'DRAFT'}.pdf`);
-                } else {
-                    const link = document.createElement('a');
-                    link.download = `GoXMR-Invoice-${invoiceNumber || 'DRAFT'}.png`;
-                    link.href = imgData;
-                    link.click();
-                }
-            } catch (e) {
-                console.error("Invoice download failed", e);
+                const link = document.createElement('a');
+                link.download = `GoXMR-Invoice-${invoiceNumber || 'DRAFT'}.png`;
+                link.href = imgData;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                return;
             }
-            return;
-        }
 
-        if (extension === 'pdf') {
-            qrInstance?.getRawData('png').then(data => {
-                if (!data) return;
-                const blob = data instanceof Blob ? data : new Blob([data as any]);
-                const reader = new FileReader();
-                reader.onload = function (event) {
-                    const imgData = event.target?.result as string;
-                    const pdf = new jsPDF();
-                    const imgProps = pdf.getImageProperties(imgData);
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                    pdf.addImage(imgData, 'PNG', 10, 10, pdfWidth - 20, pdfHeight - 20);
-                    pdf.save(`goxmr-qr-${selectedCrypto}.pdf`);
-                };
-                reader.readAsDataURL(blob);
-            });
-        } else {
-            qrInstance?.download({ name: `goxmr-qr-${selectedCrypto}`, extension });
+            // QR Mode Download (PNG/SVG only now)
+            await qrInstance?.download({ name: `goxmr-qr-${selectedCrypto}`, extension });
+        } catch (err) {
+            console.error("Download execution failed:", err);
+            alert("Download failed. Please check console for details.");
         }
     };
 
@@ -297,10 +280,6 @@ export const QRTool: React.FC = () => {
                     onDetectAndSetCrypto={detectAndSetCrypto}
                     onVerifyClick={() => { }}
                     isGenerated={!!content}
-                    isDisposable={isDisposable}
-                    onIsDisposableChange={setIsDisposable}
-                    disposableTimeout={disposableTimeout}
-                    onDisposableTimeoutChange={setDisposableTimeout}
                 />
             </div>
 
@@ -319,18 +298,12 @@ export const QRTool: React.FC = () => {
                             logo={logo}
                             notes={invoiceNotes}
                         />
-                        <div className="grid grid-cols-2 gap-4 mt-6 w-full max-w-sm">
+                        <div className="mt-6 w-full max-w-sm">
                             <button
                                 onClick={() => handleDownload('png')}
-                                className="px-4 py-3 bg-black dark:bg-white text-white dark:text-black font-mono font-black text-xs border-2 border-black dark:border-white hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] uppercase"
+                                className="w-full px-4 py-3 bg-black dark:bg-white text-white dark:text-black font-mono font-black text-xs border-2 border-black dark:border-white hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] uppercase"
                             >
                                 Save PNG
-                            </button>
-                            <button
-                                onClick={() => handleDownload('pdf')}
-                                className="px-4 py-3 bg-monero-orange text-white font-mono font-black text-xs border-2 border-black dark:border-white hover:bg-black dark:hover:bg-white dark:hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] uppercase"
-                            >
-                                Export PDF
                             </button>
                         </div>
                     </div>
@@ -341,8 +314,8 @@ export const QRTool: React.FC = () => {
                         isLoading={isLoading}
                         onDownload={handleDownload}
                         qrInstance={qrInstance}
-                        countdown={countdown}
-                        isDisposable={isDisposable}
+                        countdown={0}
+                        isDisposable={false}
                     />
                 )}
             </div>

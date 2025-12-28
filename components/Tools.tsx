@@ -35,17 +35,6 @@ export const Tools: React.FC = () => {
                     <QRTool />
                 </section>
 
-                {/* Placeholder for future tools */}
-                <section className="opacity-30 pointer-events-none grayscale mt-12 mb-20">
-                    <div className="flex items-center gap-4 mb-8">
-                        <div className="h-0.5 flex-1 bg-black/10 dark:bg-white/10"></div>
-                        <h2 className="font-mono font-black text-xl uppercase tracking-widest dark:text-white px-4">02. ADDRESS_VALIDATOR (COMING_SOON)</h2>
-                        <div className="h-0.5 flex-1 bg-black/10 dark:bg-white/10"></div>
-                    </div>
-                    <div className="h-48 border-4 border-dotted border-gray-400 dark:border-zinc-700 flex items-center justify-center">
-                        <span className="font-mono font-bold uppercase tracking-tighter">Encrypted Segment Ready for Deployment...</span>
-                    </div>
-                </section>
             </div>
         </div>
     );

@@ -38,8 +38,12 @@ export const SignalsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> 
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || 'Failed to create signal');
 
-            const shortUrl = `${window.location.origin}/s/${data.shortCode}`;
-            setResult({ shortCode: data.shortCode, fullUrl: shortUrl, expiresAt: data.expiresAt });
+            console.log("Signal Created Data:", data); // Debugging
+            const code = data.shortCode || data.short_code;
+            if (!code) throw new Error("Server returned no signal code");
+
+            const shortUrl = `${window.location.origin}/s/${code}`;
+            setResult({ shortCode: code, fullUrl: shortUrl, expiresAt: data.expiresAt });
             setStatus('success');
         } catch (err: any) {
             setStatus('error');

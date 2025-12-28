@@ -713,7 +713,11 @@ app.post('/api/tools/signal', verifyAltcha, async (req, res) => {
         await dbRun('INSERT INTO signals (short_code, original_url, user_id, password_hash, expires_at) VALUES (?, ?, ?, ?, ?)',
             [finalCode, url, userId, passHash, expiry]);
 
-        res.json({ shortCode: finalCode, expiresAt: expiry });
+        res.json({
+            shortCode: finalCode,
+            short_code: finalCode, // Defensive: ensure frontend finds it regardless of version
+            expiresAt: expiry
+        });
 
     } catch (err) {
         console.error('Signal Create Error:', err);

@@ -282,12 +282,16 @@ class MoneroMonitor {
         }
 
         // 4. MANUAL CONFIRMATION CALCULATION OVERRIDE
-        if (matchData.confs < 1 && matchData.height > 0) {
+        // Ensure strictly safe usage of BigInts vs Numbers
+        const safeHeight = Number(matchData.height);
+        if (matchData.confs < 1 && safeHeight > 0) {
             try {
-                const daemonHeight = await this.wallet.getDaemonHeight();
-                console.log(`[MONERO] Manual Conf Check: TxHeight ${matchData.height}, DaemonHeight ${daemonHeight}`);
-                if (daemonHeight >= matchData.height) {
-                    const calculatedConfs = (daemonHeight - matchData.height) + 1;
+                const daemonHeightRaw = await this.wallet.getDaemonHeight();
+                const daemonHeight = Number(daemonHeightRaw.toString());
+
+                console.log(`[MONERO] Manual Conf Check: TxHeight ${safeHeight}, DaemonHeight ${daemonHeight}`);
+                if (daemonHeight >= safeHeight) {
+                    const calculatedConfs = (daemonHeight - safeHeight) + 1;
                     console.log(`[MONERO] Overriding 0 confs with calculated: ${calculatedConfs}`);
                     matchData.confs = calculatedConfs;
                 }
@@ -341,9 +345,7 @@ class MoneroMonitor {
 
             log(`Found ${transfers.length} transfers.`);
 
-            // Try to find match using any means
             const match = transfers.find(t => {
-                // Try various ID accessors
                 let id = 'unknown';
                 if (typeof t.getTxHash === 'function') id = t.getTxHash();
                 else if (typeof t.getHash === 'function') id = t.getHash();
@@ -366,8 +368,7 @@ class MoneroMonitor {
                 return { logs, found: false };
             }
 
-            log("MATCH FOUND. Inspecting object...");
-            log(`Keys: ${Object.keys(match).join(', ')}`);
+            log("MATCH FOUND.");
 
             const methods = ['getHeight', 'getBlockHeight', 'getNumConfirmations', 'getConfirmations', 'isConfirmed', 'getAmount'];
             const results = {};
@@ -375,24 +376,32 @@ class MoneroMonitor {
             for (const m of methods) {
                 if (typeof match[m] === 'function') {
                     try {
-                        results[m] = match[m]();
+                        let val = match[m]();
+                        if (typeof val === 'bigint') val = val.toString();
+                        results[m] = val;
                     } catch (e) { results[m] = "ERROR: " + e.message; }
                 } else {
-                    results[m] = "NOT A FUNCTION";
-                    // Check if property
-                    if (match[m] !== undefined) results[m] = match[m] + " (property)";
+                    let val = match[m];
+                    if (typeof val === 'bigint') val = val.toString();
+                    if (val === undefined) val = "undefined";
+                    results[m] = val;
                 }
             }
 
-            // Explicit property check
-            results['height_prop'] = match.height;
-            results['blockHeight_prop'] = match.blockHeight;
-            results['numConfirmations_prop'] = match.numConfirmations;
+            // Explicit property check safely
+            const safeProp = (key) => {
+                let v = match[key];
+                return typeof v === 'bigint' ? v.toString() : v;
+            }
+
+            results['height_prop'] = safeProp('height');
+            results['blockHeight_prop'] = safeProp('blockHeight');
+            results['numConfirmations_prop'] = safeProp('numConfirmations');
 
             return { logs, found: true, inspection: results };
 
         } catch (e) {
-            return { logs, error: e.message, stack: e.stack };
+            return { logs, error: e.message }; // Removed stack to avoid circular json issues
         }
     }
 

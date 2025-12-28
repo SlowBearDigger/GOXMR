@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music, Lock, Wrench, Clock } from 'lucide-react';
 import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
@@ -57,6 +58,7 @@ const IconPicker = ({ currentIcon, onSelect }: { currentIcon: string, onSelect: 
     );
 };
 export const Dashboard: React.FC = () => {
+    const { setActiveSection: setGlobalSection } = useOutletContext<{ setActiveSection: (section: string) => void }>();
     const [links, setLinks] = useState<Link[]>(INITIAL_LINKS);
     const [wallets, setWallets] = useState<Wallet[]>(INITIAL_WALLETS);
     const [activeSection, setActiveSection] = useState('identity');
@@ -812,9 +814,9 @@ export const Dashboard: React.FC = () => {
                                         <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
                                             <LinkIcon size={12} className="text-monero-orange" /> Active Signals
                                         </h4>
-                                        <a href="/tools" className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
+                                        <button onClick={() => setGlobalSection('tools')} className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
                                             + Create Signal
-                                        </a>
+                                        </button>
                                     </div>
                                     <div className="space-y-2">
                                         {userSignals.length === 0 ? (
@@ -855,9 +857,9 @@ export const Dashboard: React.FC = () => {
                                         <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
                                             <Lock size={12} className="text-monero-orange" /> Dead Drops
                                         </h4>
-                                        <a href="/tools" className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
+                                        <button onClick={() => setGlobalSection('tools')} className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
                                             + Create Drop
-                                        </a>
+                                        </button>
                                     </div>
                                     <div className="space-y-2">
                                         {userDrops.length === 0 ? (

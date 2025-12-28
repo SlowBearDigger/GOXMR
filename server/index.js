@@ -343,19 +343,34 @@ const authenticateToken = (req, res, next) => {
 // Force Manual Payment Check
 app.post('/api/me/premium/check', authenticateToken, async (req, res) => {
     try {
-        console.log(`[PREMIUM] Manual check requested by ${req.user.username}`);
-        await moneroMonitor.forceCheck();
+        const { txid } = req.body;
+        console.log(`[PREMIUM] Manual check requested by ${req.user.username}. TXID Provided: ${!!txid}`);
+
+        let customMessage = null;
+
+        if (txid) {
+            const result = await moneroMonitor.checkPaymentByTxid(req.user.userId, txid);
+            if (result.found && result.valid) {
+                customMessage = "Transaction Confirmed! Premium Activated.";
+            } else if (result.found && !result.valid) {
+                customMessage = `Transaction found but not ready: ${result.reason}`;
+            } else {
+                customMessage = "Transaction ID not found in your subaddress history.";
+            }
+        } else {
+            await moneroMonitor.forceCheck();
+        }
 
         // Re-fetch user status
         const user = await dbGet('SELECT is_premium FROM users WHERE id = ?', [req.user.userId]);
         res.json({
             success: true,
             isPremium: !!user.is_premium,
-            message: user.is_premium ? 'Premium status confirmed!' : 'No confirmed payment found yet. Scanning...'
+            message: user.is_premium ? (customMessage || 'Premium status confirmed!') : (customMessage || 'No confirmed payment found yet. Scanning...')
         });
     } catch (err) {
         console.error('Manual Premium Check Error:', err);
-        res.status(500).json({ error: 'Manual check failed' });
+        res.status(500).json({ error: err.message || 'Manual check failed' });
     }
 });
 const dbAll = (query, params) => {

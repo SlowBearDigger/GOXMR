@@ -200,6 +200,59 @@ class MoneroMonitor {
         }
     }
 
+    async checkPaymentByTxid(userId, txidInput) {
+        if (!this.wallet || this.isSyncing) throw new Error("Wallet busy or not initialized");
+        const txid = txidInput.trim();
+        console.log(`[MONERO] Checking specific TXID: ${txid} for user ${userId}`);
+
+        // 1. Get user index
+        const user = await new Promise((res, rej) => {
+            db.get('SELECT premium_subaddress_index FROM users WHERE id = ?', [userId], (err, row) => {
+                if (err) rej(err); else res(row);
+            });
+        });
+
+        if (!user || user.premium_subaddress_index === null) {
+            throw new Error("User has no assigned subaddress index");
+        }
+
+        // 2. Fetch ALL transfers for this subaddress (incoming)
+        const transfers = await this.wallet.getTransfers({
+            accountIndex: 0,
+            subaddressIndex: user.premium_subaddress_index,
+            isIncoming: true
+        });
+
+        // 3. Find match
+        const match = transfers.find(t => t.getTxHash() === txid);
+
+        if (!match) {
+            console.log(`[MONERO] TXID ${txid} not found in user history.`);
+            return { found: false };
+        }
+
+        const amountStr = match.getAmount().toString();
+        const amountXmr = parseFloat(amountStr) / 1e12;
+        const confs = match.getNumConfirmations();
+
+        console.log(`[MONERO] Found TXID! Amount: ${amountXmr}, Confs: ${confs}`);
+
+        if (amountXmr < 0.001) {
+            return { found: true, valid: false, reason: 'Amount too low (< 0.001 XMR)' };
+        }
+
+        if (confs === undefined || confs < 1) {
+            return { found: true, valid: false, reason: 'Transaction pending (0 confirmations)' };
+        }
+
+        // 4. Activate Premium
+        await new Promise((res) => {
+            db.run('UPDATE users SET is_premium = 1, premium_activated_at = CURRENT_TIMESTAMP WHERE id = ?', [userId], () => res());
+        });
+
+        return { found: true, valid: true };
+    }
+
     getStatus() {
         return {
             balance: this.lastBalance,

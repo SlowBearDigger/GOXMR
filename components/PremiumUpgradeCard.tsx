@@ -16,6 +16,7 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
     onRefresh
 }) => {
     const [copied, setCopied] = useState(false);
+    const [txidInput, setTxidInput] = useState('');
     const qrRef = useRef<HTMLDivElement>(null);
     const [qrCode] = useState(() => new QRCodeStyling({
         width: 160,
@@ -130,6 +131,16 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                             >
                                 <RefreshCw size={12} /> Sync Status
                             </button>
+                            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
+                                <label className="text-[10px] font-bold uppercase text-gray-400 mb-2 block">Manual Validation (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Paste Transaction ID (TXID)"
+                                    className="w-full text-xs p-2 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-white font-mono placeholder-gray-400 focus:border-monero-orange outline-none"
+                                    value={txidInput}
+                                    onChange={(e) => setTxidInput(e.target.value)}
+                                />
+                            </div>
                             <button
                                 onClick={async () => {
                                     const btn = document.getElementById('force-scan-btn');
@@ -141,7 +152,11 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                                         const token = localStorage.getItem('goxmr_token');
                                         await fetch('/api/me/premium/check', {
                                             method: 'POST',
-                                            headers: { 'Authorization': `Bearer ${token}` }
+                                            headers: {
+                                                'Authorization': `Bearer ${token}`,
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify({ txid: txidInput.trim() || undefined })
                                         });
                                         if (onRefresh) onRefresh();
                                     } catch (e) { console.error(e); }

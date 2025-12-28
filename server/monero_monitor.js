@@ -219,6 +219,12 @@ class MoneroMonitor {
             else if (t.numConfirmations !== undefined) confs = t.numConfirmations;
             else if (t.confirmations !== undefined) confs = t.confirmations;
 
+            // Fallback: Check isConfirmed boolean
+            if (confs === 0 || confs === undefined) {
+                if (typeof t.isConfirmed === 'function' && t.isConfirmed()) confs = 1;
+                else if (t.isConfirmed === true) confs = 1;
+            }
+
         } catch (e) {
             console.error("Error parsing transfer object:", e);
         }
@@ -227,7 +233,7 @@ class MoneroMonitor {
     }
 
     async checkPaymentByTxid(userId, txidInput) {
-        if (!this.wallet || this.isSyncing) throw new Error("Wallet busy or not initialized");
+        if (!this.wallet) throw new Error("Wallet not initialized");
         const targetTxid = txidInput.trim();
         console.log(`[MONERO] Checking specific TXID: ${targetTxid} for user ${userId}`);
 
@@ -240,23 +246,35 @@ class MoneroMonitor {
 
         if (!user || user.premium_subaddress_index === null) throw new Error("User has no assigned subaddress index");
 
-        // 2. Fetch ALL transfers for this subaddress (incoming)
-        const transfers = await this.wallet.getTransfers({
-            accountIndex: 0,
-            subaddressIndex: user.premium_subaddress_index,
-            isIncoming: true
-        });
+        // Helper to fetch and find
+        const findTransfer = async () => {
+            const transfers = await this.wallet.getTransfers({
+                accountIndex: 0,
+                subaddressIndex: user.premium_subaddress_index,
+                isIncoming: true
+            });
+            return transfers.map(t => this._getSafeTransferData(t)).find(data => data.txid === targetTxid);
+        };
 
-        // 3. Find match using robust helper
-        const matchData = transfers.map(t => this._getSafeTransferData(t)).find(data => data.txid === targetTxid);
+        // 2. Initial Fetch
+        let matchData = await findTransfer();
+
+        // 3. FORCE SYNC if not found OR if found but 0 confirmations
+        if (!matchData || matchData.confs < 1) {
+            console.log(`[MONERO] TXID ${targetTxid} status: ${matchData ? 'Unconfirmed (0 confs)' : 'Not Found'}. Force syncing wallet...`);
+            try {
+                // Try to sync to get latest blocks
+                await this.wallet.sync();
+                // Re-fetch after sync
+                matchData = await findTransfer();
+            } catch (err) {
+                console.error("[MONERO] Force sync failed (might be already syncing):", err.message);
+                // If sync failed, we stick with what we have
+            }
+        }
 
         if (!matchData) {
-            console.log(`[MONERO] TXID ${targetTxid} not found in user history.`);
-            if (transfers.length > 0) {
-                // Debug logs of what was found
-                const foundTxids = transfers.map(t => this._getSafeTransferData(t).txid);
-                console.log(`[MONERO] Available transfers: ${foundTxids.join(', ')}`);
-            }
+            console.log(`[MONERO] TXID ${targetTxid} strictly not found after sync.`);
             return { found: false };
         }
 

@@ -174,18 +174,9 @@ class MoneroMonitor {
                 console.log(`[MONERO] User ${user.id} (Index ${user.premium_subaddress_index}): Found ${transfers.length} transfers.`);
 
                 const confirmedTransfer = transfers.find(t => {
-                    try {
-                        const confs = t.getNumConfirmations();
-                        const amountStr = t.getAmount().toString();
-                        const amountXmr = parseFloat(amountStr) / 1e12;
-
-                        console.log(`   -> Tx: ${this._getTxHash(t)}, Confs: ${confs}, Amount: ${amountXmr} XMR`);
-
-                        // FIX: Verify amount is at least 0.001 XMR to prevent dust attacks
-                        return confs !== undefined && confs >= 1 && amountXmr >= MIN_PAYMENT_AMOUNT;
-                    } catch (e) {
-                        return false;
-                    }
+                    const data = this._getSafeTransferData(t);
+                    console.log(`   -> Tx: ${data.txid}, Confs: ${data.confs}, Amount: ${data.amount} XMR`);
+                    return data.confs >= 1 && data.amount >= MIN_PAYMENT_AMOUNT;
                 });
 
                 if (confirmedTransfer) {
@@ -200,21 +191,45 @@ class MoneroMonitor {
         }
     }
 
-    // Helper to accept different monero-ts transfer object structures
-    _getTxHash(t) {
-        if (typeof t.getTxHash === 'function') return t.getTxHash();
-        if (typeof t.getHash === 'function') return t.getHash();
-        if (t.getTx && typeof t.getTx === 'function') {
-            const tx = t.getTx();
-            if (tx && typeof tx.getHash === 'function') return tx.getHash();
+    // Helper to safely extract data from different monero-ts transfer object structures
+    _getSafeTransferData(t) {
+        let txid = 'unknown';
+        let amount = 0;
+        let confs = 0;
+
+        try {
+            // 1. Extract TXID
+            if (typeof t.getTxHash === 'function') txid = t.getTxHash();
+            else if (typeof t.getHash === 'function') txid = t.getHash();
+            else if (t.getTx && typeof t.getTx === 'function') {
+                const tx = t.getTx();
+                if (tx && typeof tx.getHash === 'function') txid = tx.getHash();
+            }
+
+            // 2. Extract Amount (handle BigInt/BigInteger)
+            let rawAmount = 0;
+            if (typeof t.getAmount === 'function') rawAmount = t.getAmount();
+            else if (t.amount !== undefined) rawAmount = t.amount;
+
+            amount = parseFloat(rawAmount.toString()) / 1e12;
+
+            // 3. Extract Confirmations
+            if (typeof t.getNumConfirmations === 'function') confs = t.getNumConfirmations();
+            else if (typeof t.getConfirmations === 'function') confs = t.getConfirmations();
+            else if (t.numConfirmations !== undefined) confs = t.numConfirmations;
+            else if (t.confirmations !== undefined) confs = t.confirmations;
+
+        } catch (e) {
+            console.error("Error parsing transfer object:", e);
         }
-        return 'unknown_hash';
+
+        return { txid, amount, confs };
     }
 
     async checkPaymentByTxid(userId, txidInput) {
         if (!this.wallet || this.isSyncing) throw new Error("Wallet busy or not initialized");
-        const txid = txidInput.trim();
-        console.log(`[MONERO] Checking specific TXID: ${txid} for user ${userId}`);
+        const targetTxid = txidInput.trim();
+        console.log(`[MONERO] Checking specific TXID: ${targetTxid} for user ${userId}`);
 
         // 1. Get user index
         const user = await new Promise((res, rej) => {
@@ -223,9 +238,7 @@ class MoneroMonitor {
             });
         });
 
-        if (!user || user.premium_subaddress_index === null) {
-            throw new Error("User has no assigned subaddress index");
-        }
+        if (!user || user.premium_subaddress_index === null) throw new Error("User has no assigned subaddress index");
 
         // 2. Fetch ALL transfers for this subaddress (incoming)
         const transfers = await this.wallet.getTransfers({
@@ -234,29 +247,26 @@ class MoneroMonitor {
             isIncoming: true
         });
 
-        // 3. Find match
-        const match = transfers.find(t => this._getTxHash(t) === txid);
+        // 3. Find match using robust helper
+        const matchData = transfers.map(t => this._getSafeTransferData(t)).find(data => data.txid === targetTxid);
 
-        if (!match) {
-            console.log(`[MONERO] TXID ${txid} not found in user history.`);
-            // Debugging: Log what we DID find
+        if (!matchData) {
+            console.log(`[MONERO] TXID ${targetTxid} not found in user history.`);
             if (transfers.length > 0) {
-                console.log(`[MONERO] Available transfers for User ${userId}:`, transfers.map(t => this._getTxHash(t)));
+                // Debug logs of what was found
+                const foundTxids = transfers.map(t => this._getSafeTransferData(t).txid);
+                console.log(`[MONERO] Available transfers: ${foundTxids.join(', ')}`);
             }
             return { found: false };
         }
 
-        const amountStr = match.getAmount().toString();
-        const amountXmr = parseFloat(amountStr) / 1e12;
-        const confs = match.getNumConfirmations();
+        console.log(`[MONERO] Found TXID! Amount: ${matchData.amount}, Confs: ${matchData.confs}`);
 
-        console.log(`[MONERO] Found TXID! Amount: ${amountXmr}, Confs: ${confs}`);
-
-        if (amountXmr < 0.001) {
+        if (matchData.amount < 0.001) {
             return { found: true, valid: false, reason: 'Amount too low (< 0.001 XMR)' };
         }
 
-        if (confs === undefined || confs < 1) {
+        if (matchData.confs === undefined || matchData.confs < 1) {
             return { found: true, valid: false, reason: 'Transaction pending (0 confirmations)' };
         }
 

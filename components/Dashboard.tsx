@@ -832,8 +832,12 @@ export const Dashboard: React.FC = () => {
                                                 <div key={sig.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
                                                     <div className="overflow-hidden">
                                                         <div className="flex items-center gap-2 mb-1">
-                                                            <span className="bg-monero-orange text-white text-[8px] font-black px-1 uppercase tracking-tighter">SIG_{sig.short_code}</span>
-                                                            <span className="text-[9px] font-mono font-bold dark:text-white truncate max-w-[150px]">{sig.original_url}</span>
+                                                            <a href={`/s/${sig.short_code}`} target="_blank" rel="noopener noreferrer" className="bg-monero-orange text-white text-[8px] font-black px-1 uppercase tracking-tighter hover:bg-black transition-colors">
+                                                                {window.location.host}/s/{sig.short_code}
+                                                            </a>
+                                                            <span className="text-[9px] font-mono font-bold dark:text-gray-400 truncate max-w-[150px] opacity-70">
+                                                                → {sig.original_url}
+                                                            </span>
                                                         </div>
                                                         <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase underline">
                                                             <span>Hits: {sig.visit_count}</span>

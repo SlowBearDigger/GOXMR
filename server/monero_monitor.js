@@ -48,7 +48,7 @@ class MoneroMonitor {
                 console.log(`[MONERO] Opening existing wallet at ${this.walletPath}`);
                 this.wallet = await monerojs.openWalletFull({
                     path: this.walletPath,
-                    password: 'super_secret_local_password',
+                    password: process.env.MONERO_WALLET_PASSWORD || 'super_secret_local_password',
                     networkType: 'mainnet'
                 });
                 await this.wallet.setDaemonConnection(daemonUrl);
@@ -59,7 +59,7 @@ class MoneroMonitor {
 
                 this.wallet = await monerojs.createWalletFull({
                     path: this.walletPath,
-                    password: 'super_secret_local_password',
+                    password: process.env.MONERO_WALLET_PASSWORD || 'super_secret_local_password',
                     networkType: 'mainnet',
                     serverUri: daemonUrl,
                     primaryAddress: address,
@@ -84,7 +84,6 @@ class MoneroMonitor {
         if (!this.wallet) return;
         // Periodic Sync & Payment Check
         this.sync();
-        setInterval(() => this.sync(), 2 * 60 * 1000); // Sync balance every 2m
         setInterval(() => this.sync(), 2 * 60 * 1000); // Sync balance every 2m
         setInterval(() => this.checkPremiumPayments(), 2 * 60 * 1000); // Check payments every 2m
     }
@@ -151,6 +150,7 @@ class MoneroMonitor {
     async checkPremiumPayments() {
         if (!this.wallet || this.isSyncing) return;
         console.log('[MONERO] Checking for new premium payments...');
+        const MIN_PAYMENT_AMOUNT = 0.001; // XMR
 
         try {
             // Get users waiting for activation
@@ -163,7 +163,7 @@ class MoneroMonitor {
             if (pendingUsers.length === 0) return;
             console.log(`[MONERO] Scanning for ${pendingUsers.length} pending users...`);
 
-            // Simple check: Any transfer to the specific subaddress index with confirmations >= 1
+            // Check payments
             for (const user of pendingUsers) {
                 const transfers = await this.wallet.getTransfers({
                     accountIndex: 0,
@@ -176,16 +176,20 @@ class MoneroMonitor {
                 const confirmedTransfer = transfers.find(t => {
                     try {
                         const confs = t.getNumConfirmations();
-                        const amount = t.getAmount().toString();
-                        console.log(`   -> Tx: ${t.getTxHash()}, Confs: ${confs}, Amount: ${amount}`);
-                        return confs !== undefined && confs >= 1;
+                        const amountStr = t.getAmount().toString();
+                        const amountXmr = parseFloat(amountStr) / 1e12;
+
+                        console.log(`   -> Tx: ${t.getTxHash()}, Confs: ${confs}, Amount: ${amountXmr} XMR`);
+
+                        // FIX: Verify amount is at least 0.001 XMR to prevent dust attacks
+                        return confs !== undefined && confs >= 1 && amountXmr >= MIN_PAYMENT_AMOUNT;
                     } catch (e) {
                         return false;
                     }
                 });
 
                 if (confirmedTransfer) {
-                    console.log(`[MONERO] Payment detected for user ${user.id}! Activating Premium.`);
+                    console.log(`[MONERO] Valid Payment detected for user ${user.id}! Activating Premium.`);
                     await new Promise((res) => {
                         db.run('UPDATE users SET is_premium = 1, premium_activated_at = CURRENT_TIMESTAMP WHERE id = ?', [user.id], () => res());
                     });

@@ -28,24 +28,7 @@ if (!ALTCHA_HMAC_KEY) {
 // ----------------------------------------
 const moneroMonitor = require('./monero_monitor');
 
-// Force Manual Payment Check
-app.post('/api/me/premium/check', authenticateToken, async (req, res) => {
-    try {
-        console.log(`[PREMIUM] Manual check requested by ${req.user.username}`);
-        await moneroMonitor.forceCheck();
 
-        // Re-fetch user status
-        const user = await dbGet('SELECT is_premium FROM users WHERE id = ?', [req.user.userId]);
-        res.json({
-            success: true,
-            isPremium: !!user.is_premium,
-            message: user.is_premium ? 'Premium status confirmed!' : 'No confirmed payment found yet. Scanning...'
-        });
-    } catch (err) {
-        console.error('Manual Premium Check Error:', err);
-        res.status(500).json({ error: 'Manual check failed' });
-    }
-});
 
 console.log('--- ENV DEBUG ---');
 console.log('NODE_ENV:', process.env.NODE_ENV);
@@ -61,7 +44,16 @@ const {
 } = require('@simplewebauthn/server');
 const rpName = 'GoXMR Sovereign';
 const rpID = process.env.RP_ID || 'localhost';
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000 http://localhost:5173 https://goxmr.click http://goxmr.click').split(' ');
+const defaultOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://goxmr.click',
+    'http://goxmr.click',
+    'https://www.goxmr.click'
+];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(/[\s,]+/) // Split by comma OR space
+    : defaultOrigins;
 console.log(`[DEBUG] NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`[DEBUG] JWT_SECRET present: ${!!process.env.JWT_SECRET}`);
 
@@ -94,7 +86,7 @@ app.use(helmet({
             "style-src": ["'self'", "'unsafe-inline'"],
             "font-src": ["'self'", "data:"],
             "img-src": ["'self'", "data:", "blob:", "https://goxmr.click", "https://upload.wikimedia.org", "https://assets.coingecko.com", "https://www.getmonero.org"],
-            "connect-src": ["'self'", "blob:", "https://api.coingecko.com"]
+            "connect-src": ["'self'", "blob:", "https://api.coingecko.com", "https://node.sethforprivacy.com:443", "https://node.sethforprivacy.com"]
         }
     }
 }));
@@ -121,10 +113,52 @@ const botHoneypot = (req, res, next) => {
     if (website_id_verify || _bot_check) {
         console.warn(`[DEFENSE] Honeypot triggered by IP: ${req.ip}. Likely bot activity.`);
 
-        return res.status(418).json({ error: "Protocol Error (HC-01)" });
+        return res.status(400).json({ error: "Bad Request" }); // Generic error to hide honeypot logic
     }
     next();
+    next();
 };
+
+// --- ANTI-SCRAPING & BOT DEFENSE ---
+const antiScrapingMiddleware = (req, res, next) => {
+    const userAgent = req.get('User-Agent') || '';
+    const origin = req.get('Origin');
+    const referer = req.get('Referer');
+
+    // 1. Block known bot User-Agents
+    const blockedAgents = /curl|wget|python-requests|scrapy|httpie|postman|insomnia/i;
+    if (blockedAgents.test(userAgent)) {
+        console.warn(`[DEFENSE] Blocked Tool User-Agent: ${userAgent} from ${req.ip}`);
+        return res.status(403).json({ error: "Access Denied: Automated tools not allowed." });
+    }
+
+    // 2. Strict Origin/Referer Check for API endpoints (excluding simple GETs if needed, but hardening here)
+    // We allow requests if they have a valid Origin matching our allowed list, OR if it's a browser navigation (complex to detect perfectly, but we default to blocking API abuse)
+    const isApiRequest = req.path.startsWith('/api/');
+
+    if (isApiRequest) {
+        // If Origin is present, it MUST be allowed
+        if (origin && !allowedOrigins.includes(origin)) {
+            console.warn(`[DEFENSE] Blocked Origin: ${origin}`);
+            return res.status(403).json({ error: "Access Denied" });
+        }
+
+        // For critical state-changing methods, require Origin or Referer
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+            const validOrigin = origin && allowedOrigins.includes(origin);
+            const validReferer = referer && allowedOrigins.some(allowed => referer.startsWith(allowed));
+
+            if (!validOrigin && !validReferer) {
+                console.warn(`[DEFENSE] Blocked Headless/Script Request (No Origin/Referer)`);
+                return res.status(403).json({ error: "Access Denied: Browser required." });
+            }
+        }
+    }
+
+    next();
+};
+app.use(antiScrapingMiddleware);
+
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
@@ -274,7 +308,19 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // Increased to 10MB for audio, but we'll recommend small files
     fileFilter: (req, file, cb) => {
         const filetypes = /jpeg|jpg|png|gif|webp|mpeg|mp3/;
-        const items = filetypes.test(path.extname(file.originalname).toLowerCase());
+        const extname = path.extname(file.originalname).toLowerCase();
+
+        // Block double extensions (e.g., .php.jpg)
+        if (file.originalname.split('.').length > 2) {
+            const parts = file.originalname.split('.');
+            // Allow normal names like my.image.jpg but block .php.jpg
+            const dangerous = /php|sh|exe|bat|js|py/i;
+            if (dangerous.test(parts[parts.length - 2])) {
+                return cb(new Error("Security Block: Double extension detected."));
+            }
+        }
+
+        const items = filetypes.test(extname);
         const mimetype = filetypes.test(file.mimetype);
         if (mimetype && items) {
             return cb(null, true);
@@ -293,6 +339,25 @@ const authenticateToken = (req, res, next) => {
         next();
     });
 };
+
+// Force Manual Payment Check
+app.post('/api/me/premium/check', authenticateToken, async (req, res) => {
+    try {
+        console.log(`[PREMIUM] Manual check requested by ${req.user.username}`);
+        await moneroMonitor.forceCheck();
+
+        // Re-fetch user status
+        const user = await dbGet('SELECT is_premium FROM users WHERE id = ?', [req.user.userId]);
+        res.json({
+            success: true,
+            isPremium: !!user.is_premium,
+            message: user.is_premium ? 'Premium status confirmed!' : 'No confirmed payment found yet. Scanning...'
+        });
+    } catch (err) {
+        console.error('Manual Premium Check Error:', err);
+        res.status(500).json({ error: 'Manual check failed' });
+    }
+});
 const dbAll = (query, params) => {
     return new Promise((resolve, reject) => {
         db.all(query, params, (err, rows) => {
@@ -332,6 +397,11 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
         // Security: Limit number of items
         if ((links && links.length > 50) || (wallets && wallets.length > 20)) {
             return res.status(400).json({ error: 'Security: Too many profile items. Limit: 50 links, 20 wallets.' });
+        }
+
+        // Security: Validate design config size/structure
+        if (design && JSON.stringify(design).length > 20000) {
+            return res.status(400).json({ error: 'Design config too large' });
         }
 
         await dbRun('UPDATE users SET design_config = ? WHERE id = ?', [JSON.stringify(design), userId]);

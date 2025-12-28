@@ -24,6 +24,9 @@ goxmr_deploy_v1.zip
 .env.production
 server/.env
 server/wallet_data/
+wallet_data/
+server/.altcha_key
+.altcha_key
 server/uploads/*
 !server/uploads/.gitkeep
 

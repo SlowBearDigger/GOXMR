@@ -275,6 +275,10 @@ export const Dashboard: React.FC = () => {
             await fetchUserContent();
         };
         init();
+
+        const handleUpdate = () => fetchUserContent();
+        window.addEventListener('goxmr_content_update', handleUpdate);
+        return () => window.removeEventListener('goxmr_content_update', handleUpdate);
     }, []);
     const [isDeploying, setIsDeploying] = useState(false);
     const [isDeploySuccess, setIsDeploySuccess] = useState(false);

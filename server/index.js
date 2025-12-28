@@ -790,7 +790,13 @@ app.get('/api/resolve/signal/:code', async (req, res) => {
         }
 
         await dbRun('UPDATE signals SET visit_count = visit_count + 1 WHERE id = ?', [signal.id]);
-        res.json({ url: signal.original_url });
+
+        let targetUrl = signal.original_url;
+        if (!/^https?:\/\//i.test(targetUrl)) {
+            targetUrl = 'https://' + targetUrl;
+        }
+
+        res.json({ url: targetUrl });
 
     } catch (err) {
         res.status(500).json({ error: 'Server Error' });

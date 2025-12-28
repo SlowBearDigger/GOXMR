@@ -45,6 +45,8 @@ export const SignalsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> 
             const shortUrl = `${window.location.origin}/s/${code}`;
             setResult({ shortCode: code, fullUrl: shortUrl, expiresAt: data.expiresAt });
             setStatus('success');
+            // Trigger Dashboard refresh if applicable
+            window.dispatchEvent(new Event('goxmr_content_update'));
         } catch (err: any) {
             setStatus('error');
             setErrorMsg(err.message);

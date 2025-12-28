@@ -176,7 +176,9 @@ class MoneroMonitor {
                 const confirmedTransfer = transfers.find(t => {
                     const data = this._getSafeTransferData(t);
                     console.log(`   -> Tx: ${data.txid}, Confs: ${data.confs}, Amount: ${data.amount} XMR`);
-                    return data.confs >= 1 && data.amount >= MIN_PAYMENT_AMOUNT;
+                    // ALLOW 0-CONF: Accept if amount matches, regardless of confs
+                    // We trust the subaddress separation.
+                    return data.amount >= MIN_PAYMENT_AMOUNT;
                 });
 
                 if (confirmedTransfer) {
@@ -306,8 +308,8 @@ class MoneroMonitor {
             return { found: true, valid: false, reason: 'Amount too low (< 0.001 XMR)' };
         }
 
-        if (matchData.confs === undefined || matchData.confs < 1) {
-            return { found: true, valid: false, reason: 'Transaction pending (0 confirmations)' };
+        if (matchData.params?.confs === undefined || matchData.confs < 1) {
+            console.warn('[MONERO] Transaction pending (0 confs) or undefined confs. Accepting due to 0-conf policy.');
         }
 
         // 5. Activate Premium

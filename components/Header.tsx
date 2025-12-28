@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Menu, X, Sun, Moon } from 'lucide-react';
+import { ArrowRight, Menu, X, Sun, Moon, QrCode, ChevronDown, Wrench } from 'lucide-react';
 import { DonationGoal } from './DonationGoal';
 import { PriceTicker } from './PriceTicker';
 
@@ -11,14 +11,15 @@ interface HeaderProps {
     onLogoutClick: () => void;
     theme?: 'light' | 'dark';
     onThemeToggle?: () => void;
-    activeSection?: 'home' | 'learn' | 'guide';
-    onNavigate?: (section: 'home' | 'learn' | 'guide') => void;
+    activeSection?: 'home' | 'learn' | 'guide' | 'tools';
+    onNavigate?: (section: 'home' | 'learn' | 'guide' | 'tools') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginClick, onRegisterClick, onLogoutClick, theme, onThemeToggle, activeSection, onNavigate }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isToolsOpen, setIsToolsOpen] = useState(false);
 
-    const handleNavClick = (section: 'home' | 'learn' | 'guide') => {
+    const handleNavClick = (section: 'home' | 'learn' | 'guide' | 'tools') => {
         if (isLoggedIn && section === 'home') {
             window.location.href = '/dashboard';
         } else if (onNavigate) {
@@ -68,6 +69,35 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
                                 {item.name}
                             </button>
                         ))}
+
+                        {/* Tools Dropdown */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsToolsOpen(!isToolsOpen)}
+                                onMouseEnter={() => setIsToolsOpen(true)}
+                                className={`flex items-center gap-1 font-mono font-bold text-sm tracking-tight uppercase transition-colors ${activeSection === 'tools' ? 'text-monero-orange' : 'hover:text-monero-orange dark:text-white'
+                                    }`}
+                            >
+                                Tools <ChevronDown size={14} className={`transition-transform ${isToolsOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isToolsOpen && (
+                                <div
+                                    className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] py-2 z-[60]"
+                                    onMouseLeave={() => setIsToolsOpen(false)}
+                                >
+                                    <button
+                                        onClick={() => handleNavClick('tools')}
+                                        className="w-full text-left px-4 py-2 hover:bg-monero-orange hover:text-white font-mono font-bold text-xs uppercase flex items-center gap-2 dark:text-white dark:hover:text-white"
+                                    >
+                                        <QrCode size={14} /> QR Foundry
+                                    </button>
+                                    <div className="px-4 py-2 border-t border-black/10 dark:border-white/10 mt-1">
+                                        <span className="text-[8px] font-black uppercase opacity-30 dark:text-white">More tools pending...</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Auth Buttons */}
@@ -136,13 +166,22 @@ export const Header: React.FC<HeaderProps> = ({ isLoggedIn, username, onLoginCli
                                 key={item.name}
                                 onClick={() => { handleNavClick(item.section); setIsMenuOpen(false); }}
                                 className={`w-full border-2 border-black dark:border-white p-4 font-mono font-bold uppercase transition-all active:translate-x-1 text-center ${activeSection === item.section
-                                        ? 'bg-monero-orange text-white'
-                                        : 'hover:bg-monero-orange hover:text-white dark:text-white'
+                                    ? 'bg-monero-orange text-white'
+                                    : 'hover:bg-monero-orange hover:text-white dark:text-white'
                                     }`}
                             >
                                 {item.name}
                             </button>
                         ))}
+                        <button
+                            onClick={() => { handleNavClick('tools'); setIsMenuOpen(false); }}
+                            className={`w-full border-2 border-black dark:border-white p-4 font-mono font-bold uppercase transition-all active:translate-x-1 text-center ${activeSection === 'tools'
+                                ? 'bg-monero-orange text-white'
+                                : 'hover:bg-monero-orange hover:text-white dark:text-white'
+                                }`}
+                        >
+                            Tools (QR Foundry)
+                        </button>
                     </div>
 
                     <div className="h-[2px] bg-black dark:bg-white opacity-10 my-2" />

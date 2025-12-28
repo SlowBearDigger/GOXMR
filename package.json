@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.2.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.4",
     "lucide-react": "^0.562.0",
     "openpgp": "^6.3.0",
     "qr-code-styling": "^1.9.2",

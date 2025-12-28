@@ -1,12 +1,12 @@
 export type ShapeType = 'square' | 'dots' | 'rounded' | 'extra-rounded' | 'classy' | 'classy-rounded';
 export type CornerType = 'square' | 'dot' | 'extra-rounded';
 export type GradientType = 'linear' | 'radial';
-export type CryptoType = 'monero' | 'bitcoin' | 'ethereum' | 'custom';
+export type CryptoType = 'monero' | 'bitcoin' | 'ethereum' | 'custom' | 'litecoin' | 'dogecoin' | 'dash' | 'zcash' | 'solana' | 'cardano';
 
 export interface Preset {
     name: string;
-    description: string;
-    config: {
+    description?: string;
+    options: {
         color: string;
         shape: ShapeType;
         cornerType: CornerType;
@@ -15,6 +15,7 @@ export interface Preset {
         gradientType: GradientType;
         backgroundColor: string;
     };
+    randomColors?: string[];
 }
 
 export interface Link {

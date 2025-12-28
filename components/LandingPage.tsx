@@ -7,6 +7,7 @@ import { DECORATIVE_HASHES } from '../constants';
 import { useDraggable } from '../hooks/useDraggable';
 import { LearnMonero } from './LearnMonero';
 import { Guide } from './Guide';
+import { Tools } from './Tools';
 
 interface LandingPageProps {
     onOpenRegister: (username?: string) => void;
@@ -116,7 +117,7 @@ const DraggableCard: React.FC<DraggableCardProps> = ({ id, icon, title, value, t
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
     // Correctly accessing context with type safety
-    const { activeSection } = useOutletContext<{ activeSection: 'home' | 'learn' | 'guide' }>() || { activeSection: 'home' };
+    const { activeSection } = useOutletContext<{ activeSection: 'home' | 'learn' | 'guide' | 'tools' }>() || { activeSection: 'home' };
 
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
     const {
@@ -159,6 +160,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenRegister }) => {
     // Conditional Rendering based on activeSection
     if (activeSection === 'learn') return <LearnMonero />;
     if (activeSection === 'guide') return <Guide />;
+    if (activeSection === 'tools') return <Tools />;
 
     // Default: Return the Workspace
     return (

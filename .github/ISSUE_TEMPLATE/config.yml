@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or help
+    url: https://github.com/SlowBearDigger/GOXMR/discussions/categories/q-a
+    about: Ask a question in Discussions instead of opening an issue.
+  - name: Idea or brainstorm
+    url: https://github.com/SlowBearDigger/GOXMR/discussions/categories/ideas
+    about: Share an idea in Discussions before filing a feature request.
+  - name: Security vulnerability
+    url: mailto:abuse@goxmr.click
+    about: Do not open a public issue. Email abuse@goxmr.click or use the homepage PGP key.

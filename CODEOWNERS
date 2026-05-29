@@ -1,0 +1,13 @@
+# GitHub uses this to auto-assign review on PRs.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @SlowBearDigger
+
+# Security-sensitive surfaces — always reviewed
+server/privacy.js     @SlowBearDigger
+server/csrf.js        @SlowBearDigger
+server/openaliasSync.js @SlowBearDigger
+server/mailer.js      @SlowBearDigger
+server/index.js       @SlowBearDigger
+.github/SECURITY.md   @SlowBearDigger
+CHANGELOG.md          @SlowBearDigger

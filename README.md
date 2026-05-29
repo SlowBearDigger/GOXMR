@@ -1,4 +1,14 @@
+<div align="center">
+
+<a href="https://goxmr.click"><img src="public/logo.png" alt="GOXMR" width="140" height="140"></a>
+
 # GOXMR
+
+**Sovereign Privacy-First Link-in-Bio for the Monero ecosystem.**
+
+One handle, three URLs, four federated surfaces. Hosted from one VPS, signed by your own DNS.
+
+[**goxmr.click**](https://goxmr.click) · [**.onion mirror**](http://5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion) · [**/status**](https://goxmr.click/status) · [**/privacy**](https://goxmr.click/privacy) · [**/terms**](https://goxmr.click/terms)
 
 <p>
   <a href="https://github.com/SlowBearDigger/GOXMR/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/SlowBearDigger/GOXMR?style=for-the-badge&display_name=tag&color=F26822&logo=github&logoColor=white"></a>
@@ -7,10 +17,14 @@
   <a href="https://github.com/SlowBearDigger/GOXMR/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/SlowBearDigger/GOXMR?style=for-the-badge&color=000000&logo=github&logoColor=white"></a>
   <a href="https://github.com/SlowBearDigger/GOXMR/blob/main/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-read-F26822?style=for-the-badge"></a>
 </p>
+<p>
+  <a href="https://github.com/SlowBearDigger/GOXMR/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/SlowBearDigger/GOXMR?style=for-the-badge&color=F26822&logo=git&logoColor=white"></a>
+  <a href="http://5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion"><img alt="Tor v3 mirror" src="https://img.shields.io/badge/Tor-v3%20hidden%20service-7E4798?style=for-the-badge&logo=torproject&logoColor=white"></a>
+  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-F26822?style=for-the-badge&logo=github&logoColor=white"></a>
+  <a href="https://github.com/SlowBearDigger/GOXMR/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/SlowBearDigger/GOXMR?style=for-the-badge&color=F26822&logo=github&logoColor=white"></a>
+</p>
 
-Privacy-first, open-source sovereign identity and storefront for the Monero ecosystem. Each account becomes a federated handle that resolves across the clearnet, Tor, OpenAlias, Nostr, and Mastodon.
-
-Live at **[goxmr.click](https://goxmr.click)** and **[5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion](http://5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion)**.
+</div>
 
 ---
 

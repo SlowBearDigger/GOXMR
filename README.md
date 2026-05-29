@@ -1,9 +1,12 @@
 # GOXMR
 
-[![Latest release](https://img.shields.io/github/v/release/SlowBearDigger/GOXMR?display_name=tag&color=F26822)](https://github.com/SlowBearDigger/GOXMR/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
-[![Discussions](https://img.shields.io/github/discussions/SlowBearDigger/GOXMR?color=F26822)](https://github.com/SlowBearDigger/GOXMR/discussions)
-[![Open issues](https://img.shields.io/github/issues/SlowBearDigger/GOXMR?color=black)](https://github.com/SlowBearDigger/GOXMR/issues)
+<p>
+  <a href="https://github.com/SlowBearDigger/GOXMR/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/SlowBearDigger/GOXMR?style=for-the-badge&display_name=tag&color=F26822&logo=github&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-000000?style=for-the-badge"></a>
+  <a href="https://github.com/SlowBearDigger/GOXMR/discussions"><img alt="Discussions" src="https://img.shields.io/github/discussions/SlowBearDigger/GOXMR?style=for-the-badge&color=F26822&logo=github&logoColor=white"></a>
+  <a href="https://github.com/SlowBearDigger/GOXMR/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/SlowBearDigger/GOXMR?style=for-the-badge&color=000000&logo=github&logoColor=white"></a>
+  <a href="https://github.com/SlowBearDigger/GOXMR/blob/main/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-read-F26822?style=for-the-badge"></a>
+</p>
 
 Privacy-first, open-source sovereign identity and storefront for the Monero ecosystem. Each account becomes a federated handle that resolves across the clearnet, Tor, OpenAlias, Nostr, and Mastodon.
 

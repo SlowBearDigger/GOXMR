@@ -448,6 +448,16 @@ db.serialize(() => {
         if (err) console.error('Migration Error (gallery_images):', err);
     });
     db.run('CREATE INDEX IF NOT EXISTS idx_gallery_user ON gallery_images(user_id, sort_order)');
+    // visibility: public (on grid) | unlisted (link-only) | private (owner only)
+    db.run("ALTER TABLE gallery_images ADD COLUMN visibility TEXT DEFAULT 'public'", (err) => {
+        if (err && !err.message.includes('duplicate column name')) console.error('Migration (gallery.visibility):', err);
+    });
+    db.run('ALTER TABLE gallery_images ADD COLUMN alt_text TEXT', (err) => {
+        if (err && !err.message.includes('duplicate column name')) console.error('Migration (gallery.alt_text):', err);
+    });
+    db.run('ALTER TABLE gallery_images ADD COLUMN views INTEGER DEFAULT 0', (err) => {
+        if (err && !err.message.includes('duplicate column name')) console.error('Migration (gallery.views):', err);
+    });
 });
 const dbGet = (query, params) => {
     return new Promise((resolve, reject) => {
@@ -972,12 +982,28 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
 const GALLERY_MAX_PER_USER = parseInt(process.env.MAX_GALLERY_PER_USER || '12', 10);
 const GALLERY_MAX_DIM = parseInt(process.env.MAX_GALLERY_DIM || '1600', 10);
 const GALLERY_WEBP_QUALITY = 82;
+const GALLERY_VISIBILITIES = new Set(['public', 'unlisted', 'private']);
 
-// GET own gallery (authed, includes captions and order)
+// Sharp pipeline that strips ALL metadata (EXIF, GPS, IPTC, XMP). Defence
+// for users who didn't realise their phone was tagging photos with home
+// coordinates. .rotate() honours the EXIF orientation tag then drops it.
+async function processGalleryImage(srcPath, isGif) {
+    if (isGif) {
+        return { ext: '.gif', buffer: await fs.promises.readFile(srcPath) };
+    }
+    const buf = await sharp(srcPath, { failOn: 'truncated' })
+        .rotate()
+        .resize(GALLERY_MAX_DIM, GALLERY_MAX_DIM, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: GALLERY_WEBP_QUALITY })
+        .toBuffer();
+    return { ext: '.webp', buffer: buf };
+}
+
+// GET own gallery (authed)
 app.get('/api/me/gallery', authenticateToken, async (req, res) => {
     try {
         const rows = await dbAll(
-            'SELECT id, file_url, caption, sort_order, created_at FROM gallery_images WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
+            'SELECT id, file_url, caption, alt_text, visibility, sort_order, views, created_at FROM gallery_images WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
             [req.user.userId]
         );
         res.json({ images: rows, max: GALLERY_MAX_PER_USER });
@@ -987,13 +1013,13 @@ app.get('/api/me/gallery', authenticateToken, async (req, res) => {
     }
 });
 
-// GET public gallery by username
+// GET public gallery by username — only public visibility shows on the grid
 app.get('/api/user/:username/gallery', async (req, res) => {
     try {
         const user = await dbGet('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [req.params.username]);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const rows = await dbAll(
-            'SELECT id, file_url, caption, sort_order FROM gallery_images WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
+            "SELECT id, file_url, caption, alt_text, sort_order, views FROM gallery_images WHERE user_id = ? AND visibility = 'public' ORDER BY sort_order ASC, id ASC",
             [user.id]
         );
         res.set('Cache-Control', 'public, max-age=60');
@@ -1004,56 +1030,91 @@ app.get('/api/user/:username/gallery', async (req, res) => {
     }
 });
 
-// POST upload one gallery image (multipart)
-app.post('/api/me/gallery', authenticateToken, upload.single('image'), async (req, res) => {
+// GET single unlisted image by id+username — for direct-link sharing of unlisted ones.
+// Owner can also fetch private through this when authenticated.
+app.get('/api/user/:username/gallery/:id', async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-        // enforce quota BEFORE consuming the file slot
-        const count = await dbGet('SELECT COUNT(*) as n FROM gallery_images WHERE user_id = ?', [req.user.userId]);
-        if ((count?.n || 0) >= GALLERY_MAX_PER_USER) {
-            fs.unlink(req.file.path, () => {});
-            return res.status(409).json({ error: `Gallery full (${GALLERY_MAX_PER_USER} images max). Delete one first.` });
-        }
-        const isGif = path.extname(req.file.originalname).toLowerCase() === '.gif';
-        let fileUrl;
-        if (isGif) {
-            // preserve animation, just move
-            const GIF_LIMIT = 5 * 1024 * 1024;
-            if (req.file.size > GIF_LIMIT) {
-                fs.unlink(req.file.path, () => {});
-                return res.status(400).json({ error: 'GIF too large (5MB max)' });
-            }
-            const filename = `${req.file.filename.split('.')[0]}.gif`;
-            fs.renameSync(req.file.path, path.join(uploadDir, filename));
-            fileUrl = `/uploads/${filename}`;
-        } else {
-            const baseName = `${req.file.filename.split('.')[0]}-gal.webp`;
-            const outputBuffer = await sharp(req.file.path)
-                .resize(GALLERY_MAX_DIM, GALLERY_MAX_DIM, { fit: 'inside', withoutEnlargement: true })
-                .webp({ quality: GALLERY_WEBP_QUALITY })
-                .toBuffer();
-            await fs.promises.writeFile(path.join(uploadDir, baseName), outputBuffer);
-            fs.unlink(req.file.path, () => {});
-            fileUrl = `/uploads/${baseName}`;
-        }
-        const caption = typeof req.body.caption === 'string' ? req.body.caption.slice(0, 280) : null;
-        // next sort_order is MAX+1 so new arrivals show at the end
-        const maxRow = await dbGet('SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM gallery_images WHERE user_id = ?', [req.user.userId]);
-        const result = await dbRun(
-            'INSERT INTO gallery_images (user_id, file_url, caption, sort_order) VALUES (?, ?, ?, ?)',
-            [req.user.userId, fileUrl, caption, maxRow.next]
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(400).json({ error: 'Bad id' });
+        const user = await dbGet('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [req.params.username]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const row = await dbGet(
+            'SELECT id, file_url, caption, alt_text, visibility, views FROM gallery_images WHERE id = ? AND user_id = ?',
+            [id, user.id]
         );
+        if (!row) return res.status(404).json({ error: 'Not found' });
+        if (row.visibility === 'private') {
+            // owner-only: needs auth and matching id
+            const auth = req.headers['authorization'];
+            const token = auth && auth.split(' ')[1];
+            if (!token) return res.status(404).json({ error: 'Not found' });
+            try {
+                const u = jwt.verify(token, JWT_SECRET);
+                if (u.userId !== user.id) return res.status(404).json({ error: 'Not found' });
+            } catch { return res.status(404).json({ error: 'Not found' }); }
+        }
+        res.json(row);
+    } catch (err) {
+        const id = logError('GALLERY_ITEM', err);
+        res.status(500).json({ error: 'Server error', id });
+    }
+});
+
+// POST single upload OR bulk: multer accepts up to GALLERY_MAX_PER_USER files at once.
+// The client may send `image` (single) or `images[]` (multiple).
+app.post('/api/me/gallery', authenticateToken, upload.array('images', GALLERY_MAX_PER_USER), async (req, res) => {
+    // Some clients still send the legacy single-file `image` field — express
+    // accepts that through upload.fields, but with .array() we route both into
+    // req.files. If a caller used `image`, multer parses it as `image` in body.
+    const files = Array.isArray(req.files) && req.files.length ? req.files
+        : (req.file ? [req.file] : []);
+    try {
+        if (!files.length) return res.status(400).json({ error: 'No file uploaded' });
+        const count = await dbGet('SELECT COUNT(*) as n FROM gallery_images WHERE user_id = ?', [req.user.userId]);
+        const have = count?.n || 0;
+        if (have + files.length > GALLERY_MAX_PER_USER) {
+            // unlink everything we received, refuse atomically
+            for (const f of files) fs.unlink(f.path, () => {});
+            return res.status(409).json({
+                error: `Would exceed quota (${GALLERY_MAX_PER_USER} images). You have ${have}, sent ${files.length}.`
+            });
+        }
+        const visibility = GALLERY_VISIBILITIES.has(req.body.visibility) ? req.body.visibility : 'public';
+        const captionBase = typeof req.body.caption === 'string' ? req.body.caption.slice(0, 280) : null;
+        const altBase = typeof req.body.alt_text === 'string' ? req.body.alt_text.slice(0, 280) : null;
+        const maxRow = await dbGet('SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM gallery_images WHERE user_id = ?', [req.user.userId]);
+
+        const created = [];
+        let nextOrder = maxRow.next;
+        for (const file of files) {
+            const isGif = path.extname(file.originalname).toLowerCase() === '.gif';
+            if (isGif && file.size > 5 * 1024 * 1024) {
+                fs.unlink(file.path, () => {});
+                continue;
+            }
+            const { ext, buffer } = await processGalleryImage(file.path, isGif);
+            const filename = `${file.filename.split('.')[0]}-gal${ext}`;
+            await fs.promises.writeFile(path.join(uploadDir, filename), buffer);
+            fs.unlink(file.path, () => {});
+            const fileUrl = `/uploads/${filename}`;
+            const result = await dbRun(
+                'INSERT INTO gallery_images (user_id, file_url, caption, alt_text, visibility, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+                [req.user.userId, fileUrl, captionBase, altBase, visibility, nextOrder]
+            );
+            created.push({ id: result.lastID, file_url: fileUrl, caption: captionBase, alt_text: altBase, visibility, sort_order: nextOrder, views: 0 });
+            nextOrder += 1;
+        }
         const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
         if (user) profileCache.del(`user:${user.username}`);
-        res.json({ id: result.lastID, file_url: fileUrl, caption, sort_order: maxRow.next });
+        res.json({ created, count: created.length });
     } catch (err) {
-        if (req.file) fs.unlink(req.file.path, () => {});
+        for (const f of files) fs.unlink(f.path, () => {});
         const id = logError('GALLERY_UPLOAD', err, { userId: req.user?.userId });
         res.status(500).json({ error: 'Upload failed', id });
     }
 });
 
-// PUT update caption or order
+// PUT update caption, alt_text, visibility, or order
 app.put('/api/me/gallery/:id', authenticateToken, async (req, res) => {
     try {
         const id = parseInt(req.params.id, 10);
@@ -1063,14 +1124,16 @@ app.put('/api/me/gallery/:id', authenticateToken, async (req, res) => {
         const updates = [];
         const params = [];
         if (typeof req.body.caption === 'string') {
-            updates.push('caption = ?');
-            params.push(req.body.caption.slice(0, 280));
-        } else if (req.body.caption === null) {
-            updates.push('caption = NULL');
+            updates.push('caption = ?'); params.push(req.body.caption.slice(0, 280));
+        } else if (req.body.caption === null) updates.push('caption = NULL');
+        if (typeof req.body.alt_text === 'string') {
+            updates.push('alt_text = ?'); params.push(req.body.alt_text.slice(0, 280));
+        } else if (req.body.alt_text === null) updates.push('alt_text = NULL');
+        if (typeof req.body.visibility === 'string' && GALLERY_VISIBILITIES.has(req.body.visibility)) {
+            updates.push('visibility = ?'); params.push(req.body.visibility);
         }
         if (typeof req.body.sort_order === 'number') {
-            updates.push('sort_order = ?');
-            params.push(req.body.sort_order);
+            updates.push('sort_order = ?'); params.push(req.body.sort_order);
         }
         if (!updates.length) return res.json({ ok: true });
         params.push(id);
@@ -1081,6 +1144,26 @@ app.put('/api/me/gallery/:id', authenticateToken, async (req, res) => {
     } catch (err) {
         const id = logError('GALLERY_UPDATE', err, { userId: req.user?.userId });
         res.status(500).json({ error: 'Server error', id });
+    }
+});
+
+// POST anonymous view increment. No auth, no IP storage. Client is responsible
+// for sessionStorage-based dedup so a single visitor doesn't inflate the counter
+// across reloads. Worst case if abused: a slightly inflated counter, never PII.
+app.post('/api/user/:username/gallery/:id/view', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(400).json({ error: 'Bad id' });
+        const user = await dbGet('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [req.params.username]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        await dbRun(
+            "UPDATE gallery_images SET views = views + 1 WHERE id = ? AND user_id = ? AND visibility != 'private'",
+            [id, user.id]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        // failures are non-fatal — never block image viewing on stats
+        res.json({ ok: false });
     }
 });
 

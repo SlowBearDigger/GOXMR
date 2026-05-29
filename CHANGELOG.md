@@ -1,5 +1,23 @@
 # GOXMR Changelog
 
+## v2.2.1 — 2026-05-29
+
+Gallery improvements.
+
+### Gallery
+- Per-image visibility: public (on profile), unlisted (link-only), private (dashboard only)
+- Alt text field separate from caption for screen-reader accessibility
+- Bulk upload: drop multiple files onto the editor at once, multer accepts up to the quota in one POST
+- Anonymous view counter per image, no IP storage. Client dedupes per session via sessionStorage so a single visitor cannot inflate the counter on reload. Increment fires on lightbox open, not page load
+- EXIF strip is explicit: sharp `.rotate()` honours then drops the orientation tag, `.webp()` strips everything else (GPS, IPTC, XMP). GIFs pass through unchanged
+
+### API
+- `GET /api/user/:name/gallery/:id` for unlisted image fetch by direct link, private gated on owner JWT
+- `POST /api/user/:name/gallery/:id/view` anonymous view-counter bump (no auth)
+- `POST /api/me/gallery` now accepts `images[]` for bulk and still accepts the legacy `image` field
+
+---
+
 ## v2.2.0 — 2026-05-29
 
 User-facing gallery feature for public profiles.

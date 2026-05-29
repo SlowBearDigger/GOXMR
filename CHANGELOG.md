@@ -1,5 +1,34 @@
 # GOXMR Changelog
 
+## v2.1.1 — 2026-05-29
+
+Hardening and branding round.
+
+### Branding
+- Replaced the favicon set with the official Monero brand symbol (16, 32, 180, 192, 512 px). Apple touch icon and PWA icons regenerated
+- New 1200x630 og-image.png for Twitter / Telegram / Discord previews
+- index.html meta tags rewritten: og:site_name, og:image:width/height/alt, twitter:site, twitter:image:alt, theme-color split by prefers-color-scheme
+
+### Security headers
+- CSP allow-list cleaned: dropped stale third-party origins (sethforprivacy, gift.runa, cloudfront, reloadly, wikipedia), added the actual Monero remote-node pool plus DoH endpoints (dns.google, cloudflare-dns.com), allowed `https://*.goxmr.click` for the per-user subdomain assets
+- Added directives: script-src-attr 'none', frame-src 'none', media-src 'self' blob:, upgrade-insecure-requests
+- HSTS upgraded to 2-year max-age with includeSubDomains and preload
+- Explicit referrer-policy: strict-origin-when-cross-origin
+- app.disable('x-powered-by') (helmet already strips but explicit is cheap)
+
+### Resilience
+- Final Express error middleware: any uncaught throw returns `{ error, id }` with a correlation ID logged server-side, never leaks stack traces
+- process.on('unhandledRejection') and process.on('uncaughtException') now route through logError
+- CORS rejections surface as HTTP 403 instead of 500 (clearer for the client)
+
+### Dependencies
+- nodemailer pinned to ^6.10.1 (latest CRLF-injection-fixed 6.x)
+- Added npm overrides for serialize-javascript ^6.0.2 (transitive RCE fix)
+- Bumped helmet, cors, @simplewebauthn/server to latest patch
+- Outstanding: sqlite3 v5 -> v6 and bcrypt v5 -> v6 majors deferred to next maintenance window (transitive build-time-only vulns in node-gyp/tar chain, not exploitable at runtime)
+
+---
+
 ## v2.1.0 — 2026-05-29
 
 Infrastructure migration to VPS, authoritative DNS, full subdomain identity, zero-IP-collection privacy posture, Tor mirror.

@@ -1,6 +1,6 @@
 {
     "name": "goxmr-server",
-    "version": "2.1.0",
+    "version": "2.1.1",
     "description": "Backend API for GOXMR",
     "main": "index.js",
     "scripts": {
@@ -22,12 +22,16 @@
         "jsonwebtoken": "^9.0.2",
         "monero-ts": "^0.11.7",
         "multer": "^2.0.2",
-        "nodemailer": "^6.9.16",
+        "nodemailer": "^6.10.1",
         "node-cache": "^5.1.2",
         "openpgp": "^6.3.0",
         "sharp": "^0.34.5",
         "sqlite3": "^5.1.7",
         "xml2js": "^0.6.2",
         "xss": "^1.0.15"
+    },
+    "overrides": {
+        "serialize-javascript": "^6.0.2",
+        "nodemailer": "^6.10.1"
     }
 }

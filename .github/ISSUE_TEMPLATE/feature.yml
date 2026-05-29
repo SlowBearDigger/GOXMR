@@ -1,0 +1,61 @@
+name: Feature request
+description: Suggest a new feature or improvement
+title: "[feat] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please read the project posture: no analytics, no third-party scripts, no tracking, no centralized identity.
+        Suggestions that violate that posture will be closed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this solves
+      description: What is the user trying to do today that does not work, or works poorly?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would build, in shape rather than implementation detail
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface this touches
+      multiple: true
+      options:
+        - Dashboard / Settings
+        - Public profile
+        - Store / marketplace
+        - Crypto tools (swap, QR, explorer)
+        - Federation (OpenAlias, NIP-05, WebFinger)
+        - Privacy / PGP / Tor
+        - Backend API
+        - DNS / infrastructure
+        - Documentation
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: posture
+    attributes:
+      label: Posture confirmation
+      options:
+        - label: This does not add analytics, telemetry, or tracking
+          required: true
+        - label: This does not introduce a third-party JavaScript dependency loaded at runtime
+          required: true
+        - label: This does not log raw IP addresses or caller-identifying fields
+          required: true

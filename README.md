@@ -1,5 +1,10 @@
 # GOXMR
 
+[![Latest release](https://img.shields.io/github/v/release/SlowBearDigger/GOXMR?display_name=tag&color=F26822)](https://github.com/SlowBearDigger/GOXMR/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
+[![Discussions](https://img.shields.io/github/discussions/SlowBearDigger/GOXMR?color=F26822)](https://github.com/SlowBearDigger/GOXMR/discussions)
+[![Open issues](https://img.shields.io/github/issues/SlowBearDigger/GOXMR?color=black)](https://github.com/SlowBearDigger/GOXMR/issues)
+
 Privacy-first, open-source sovereign identity and storefront for the Monero ecosystem. Each account becomes a federated handle that resolves across the clearnet, Tor, OpenAlias, Nostr, and Mastodon.
 
 Live at **[goxmr.click](https://goxmr.click)** and **[5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion](http://5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion)**.
@@ -217,6 +222,9 @@ The canonical resolution path for wallets is the DNS TXT record. The HTTP endpoi
 - [/terms](https://goxmr.click/terms) — Terms of Use
 - [/status](https://goxmr.click/status) — public health snapshot
 - [CHANGELOG.md](CHANGELOG.md) — full release history
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to send a PR
+- [SECURITY.md](.github/SECURITY.md) — vulnerability disclosure
+- [Discussions](https://github.com/SlowBearDigger/GOXMR/discussions) — questions, ideas, polls, show-and-tell
 
 ## Support
 

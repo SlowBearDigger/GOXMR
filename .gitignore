@@ -69,3 +69,7 @@ server/debug_tx.js
 server/index.js.backup
 server/*copy.txt
 server/index copy.txt
+**/*.db.backup
+**/*.sqlite3.backup
+server/index.js.backup
+server/index copy.txt

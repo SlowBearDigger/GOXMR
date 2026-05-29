@@ -41,6 +41,7 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
     const [pgpPublicKey, setPgpPublicKey] = useState('');
     const [pgpError, setPgpError] = useState('');
     const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
+    const [acceptTerms, setAcceptTerms] = useState(false);
     const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({
         isOpen: false,
         title: '',
@@ -93,6 +94,10 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
     };
     const handleRegister = async () => {
         if (isAvailable !== true || isChecking) return;
+        if (!acceptTerms) {
+            showAlert("Terms Required", "Read and accept the Terms of Use to continue.");
+            return;
+        }
         if (password !== repeatPassword) {
             showAlert("Start Error", "Passwords do not match");
             return;
@@ -165,7 +170,7 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
                 <input type="checkbox" name="_bot_check" tabIndex={-1} autoComplete="off" />
             </div>
             <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-2 text-xs mb-4 dark:text-blue-300">
-                <span className="font-bold">NOTE:</span> Your username is your handle (goxmr.click/user).
+                <span className="font-bold">NOTE:</span> Your username is your handle (goxmr.click/user). You can add a Hardware Key after creating your account.
             </div>
 
             <div className="flex gap-2 mb-6">
@@ -272,9 +277,26 @@ export const RegisterForm = ({ onSuccess, initialUsername = '' }) => {
 
             <AltchaWidget onVerify={setAltchaPayload} />
 
+            {/* Terms acceptance — required */}
+            <label className="flex items-start gap-2 text-[10px] font-mono text-gray-600 dark:text-gray-400 leading-relaxed cursor-pointer">
+                <input
+                    type="checkbox"
+                    checked={acceptTerms}
+                    onChange={(e) => setAcceptTerms(e.target.checked)}
+                    className="mt-0.5 accent-monero-orange shrink-0"
+                />
+                <span>
+                    I have read and accept the{' '}
+                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline text-monero-orange hover:no-underline">
+                        Terms of Use
+                    </a>
+                    . I take full responsibility for my content, my conduct, and my own opsec.
+                </span>
+            </label>
+
             <button
                 onClick={handleRegister}
-                disabled={isAvailable !== true || isChecking || !username || (usePgp ? (!pgpPublicKey || !!pgpError) : !password) || status === 'registering' || !altchaPayload}
+                disabled={isAvailable !== true || isChecking || !username || (usePgp ? (!pgpPublicKey || !!pgpError) : !password) || status === 'registering' || !altchaPayload || !acceptTerms}
                 className={`w-full font-bold py-3 uppercase transition-colors flex justify-center items-center gap-2 ${isAvailable !== true || isChecking || !username || (usePgp ? (!pgpPublicKey || !!pgpError) : !password) || status === 'registering' ? 'bg-gray-300 dark:bg-zinc-800 cursor-not-allowed text-gray-500 dark:text-zinc-600' : 'bg-black dark:bg-white text-white dark:text-black hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white'
                     }`}
             >
@@ -705,7 +727,7 @@ export const LoginForm = ({ onSuccess }) => {
                 <div className="flex-grow border-t border-gray-300 dark:border-zinc-700"></div>
             </div>
             <button onClick={() => setMode('hardware')} className="w-full border-2 border-black dark:border-white dark:text-white font-bold py-2 uppercase hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors flex justify-center items-center gap-2 text-xs mb-2">
-                <Key size={14} /> Use Hardware Key
+                <Key size={14} /> Hardware Key / Biometrics
             </button>
             <button onClick={() => handleLogin('pgp_challenge')} className="w-full border-2 border-monero-orange font-bold py-2 uppercase hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-colors flex justify-center items-center gap-2 text-xs text-monero-orange">
                 <Shield size={14} /> PGP Identity

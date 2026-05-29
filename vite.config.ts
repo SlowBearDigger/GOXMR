@@ -1,35 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { VitePWA } from 'vite-plugin-pwa';
+
+// VitePWA intentionally removed: nothing in the app actually consumes PWA features,
+// but the plugin auto-registered a service worker + manifest on every page load,
+// which made Brave/Firefox prompt "Access other apps and services on this device"
+// (PWA install / protocol handler permission). The site is meant to be a plain web
+// surface — no installable app, no offline mode. If we ever need offline support,
+// re-add with registerType: 'prompt' and a manual user-gated registration call.
 
 export default defineConfig({
     plugins: [
         react(),
         tailwindcss(),
-        VitePWA({
-            registerType: 'autoUpdate',
-            includeAssets: ['logo.png'], // removed other assets for now as they might not exist
-            manifest: {
-                name: 'GoXMR',
-                short_name: 'GoXMR',
-                description: 'Monero Linktree Alternative',
-                theme_color: '#000000',
-                background_color: '#000000',
-                icons: [
-                    {
-                        src: 'pwa-192x192.png',
-                        sizes: '192x192',
-                        type: 'image/png'
-                    },
-                    {
-                        src: 'pwa-512x512.png',
-                        sizes: '512x512',
-                        type: 'image/png'
-                    }
-                ]
-            }
-        })
     ],
     server: {
         proxy: {

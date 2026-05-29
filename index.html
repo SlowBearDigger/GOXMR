@@ -6,6 +6,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GOXMR - Sovereign Identity</title>
 
+  <!-- Open Graph / Social Media Preview -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://goxmr.click/" />
+  <meta property="og:title" content="GOXMR | Sovereign Cryptographic Identity" />
+  <meta property="og:description"
+    content="Private Asset Swaps, Anonymous Boutique, and Sovereign Bio-Digital Identity. No KYC. No Account. Built on Monero." />
+  <meta property="og:image" content="https://goxmr.click/logo.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://goxmr.click/" />
+  <meta property="twitter:title" content="GOXMR | Sovereign Cryptographic Identity" />
+  <meta property="twitter:description"
+    content="Private Asset Swaps, Anonymous Boutique, and Sovereign Bio-Digital Identity. No KYC. No Account. Built on Monero." />
+  <meta property="twitter:image" content="https://goxmr.click/logo.png" />
+
   <!-- Security Hardening (Sovereign / CDN-Free) -->
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -20,6 +36,10 @@
 
 <body>
   <div id="root"></div>
+  <!-- Invisible decoy link for non-rendering crawlers. Humans never see it; JS-rendering
+       browsers never follow it; aggressive scrapers walk into the tarpit at /trap. -->
+  <a href="/trap" aria-hidden="true" tabindex="-1"
+     style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">x</a>
   <script type="module" src="/index.tsx"></script>
 </body>
 

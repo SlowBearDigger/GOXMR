@@ -1,5 +1,11 @@
 import React from 'react';
-import { Terminal, ArrowUpRight, Shield } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Terminal, ArrowUpRight, Shield, Scale, Globe, EyeOff, Activity } from 'lucide-react';
+
+// Tor hidden service mirror. Keeps the site reachable if DNS is censored or
+// the user wants origin-server anonymity. Address is stable across reboots
+// (Tor v3 keys live in /var/lib/tor/goxmr/).
+const ONION_URL = 'http://5vtyieb7przizt7rhl4ydeglinrjn5g2srx45i4dcbwve3pojcfmjzid.onion';
 
 const FOOTER_LINKS = [
     { name: 'SlowBearDigger', url: 'https://slowbeardigger.dev/' },
@@ -31,6 +37,33 @@ export const Footer: React.FC = () => {
                             <ArrowUpRight size={10} className="opacity-50" />
                         </a>
                     ))}
+                </div>
+            </div>
+
+            {/* Legal / opsec strip — small, persistent, never animated */}
+            <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <span>GOXMR · MIT licensed · Not a money services business</span>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <a
+                        href={ONION_URL}
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-monero-orange transition-colors"
+                        title="Tor v3 mirror — reachable from Tor Browser"
+                    >
+                        <Globe size={10} /> .onion mirror
+                    </a>
+                    <Link to="/privacy" className="inline-flex items-center gap-1 hover:text-monero-orange transition-colors">
+                        <EyeOff size={10} /> Privacy
+                    </Link>
+                    <Link to="/status" className="inline-flex items-center gap-1 hover:text-monero-orange transition-colors">
+                        <Activity size={10} /> Status
+                    </Link>
+                    <Link to="/terms" className="inline-flex items-center gap-1 hover:text-monero-orange transition-colors">
+                        <Scale size={10} /> Terms
+                    </Link>
+                    <a href="mailto:abuse@goxmr.click" className="inline-flex items-center gap-1 hover:text-monero-orange transition-colors">
+                        <Shield size={10} /> Abuse
+                    </a>
                 </div>
             </div>
 

@@ -219,6 +219,13 @@ export const SignalsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> 
                         </div>
                     )}
 
+                    {/* Hint: clarify which precondition is blocking submit so the user isn't left
+                        staring at a disabled button wondering why nothing happens. */}
+                    {(!url || !altchaPayload) && (
+                        <p className="text-[10px] font-mono font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-center">
+                            {!url ? 'Paste a URL to continue →' : !altchaPayload ? 'Complete the verification above →' : ''}
+                        </p>
+                    )}
                     <button
                         onClick={handleCreate}
                         disabled={status === 'creating' || !url || !altchaPayload}

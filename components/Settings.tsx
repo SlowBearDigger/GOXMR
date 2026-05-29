@@ -3,6 +3,9 @@ import { Shield, Lock, HardDrive, Download, Upload, Cpu, Activity, Check, AlertT
 import { startRegistration } from '@simplewebauthn/browser';
 import type { Link, Wallet } from '../types.ts';
 import { Modal } from './Modal';
+import { FederationSettings } from './FederationSettings';
+import { SelfDestructSettings } from './SelfDestructSettings';
+import { EmailPgpStatusCard } from './EmailPgpStatusCard';
 interface SettingsProps {
     links: Link[];
     wallets: Wallet[];
@@ -28,6 +31,11 @@ export const Settings: React.FC<SettingsProps> = ({ links, wallets, onRestore, u
     const [pgpPublicKey, setPgpPublicKey] = useState('');
     const [isUpdatingPgp, setIsUpdatingPgp] = useState(false);
     const [pgpStatus, setPgpStatus] = useState('');
+    const [nostrPubkey, setNostrPubkey] = useState('');
+    const [nostrStatus, setNostrStatus] = useState('');
+    const [notifEmail, setNotifEmail] = useState('');
+    const [notifEnabled, setNotifEnabled] = useState(false);
+    const [notifStatus, setNotifStatus] = useState('');
     const [isHardwareConnected, setIsHardwareConnected] = useState(false);
     const [hardwareStatus, setHardwareStatus] = useState('idle');
     const [regType, setRegType] = useState('any');
@@ -453,6 +461,7 @@ export const Settings: React.FC<SettingsProps> = ({ links, wallets, onRestore, u
                         </div>
                         <div className="space-y-3">
                             <textarea
+                                data-pgp-key-input
                                 placeholder="Paste Armor-Encoded PGP Public Key"
                                 value={pgpPublicKey}
                                 onChange={(e) => setPgpPublicKey(e.target.value)}
@@ -472,6 +481,107 @@ export const Settings: React.FC<SettingsProps> = ({ links, wallets, onRestore, u
                     </div>
                 </div>
             </div>
+            {/* Nostr Identity */}
+            <div className="pt-4 border-t-2 border-dashed border-gray-200 dark:border-zinc-800 mt-4">
+                <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400">Nostr Identity (NIP-05)</label>
+                    {nostrPubkey && <span className="text-[8px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-1 border border-purple-400">NOSTR_LINKED</span>}
+                </div>
+                <div className="space-y-3">
+                    <input
+                        type="text"
+                        placeholder="64-char hex pubkey (npub → hex)"
+                        value={nostrPubkey}
+                        onChange={e => setNostrPubkey(e.target.value)}
+                        className="w-full border-2 border-black dark:border-white p-2 font-mono text-[10px] dark:bg-zinc-800 dark:text-white"
+                        maxLength={64}
+                    />
+                    <button
+                        onClick={async () => {
+                            const token = localStorage.getItem('goxmr_token');
+                            setNostrStatus('saving');
+                            try {
+                                const res = await fetch('/api/me/nostr', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify({ pubkey: nostrPubkey || null })
+                                });
+                                if (res.ok) setNostrStatus('success');
+                                else { const d = await res.json(); setNostrStatus(d.error || 'error'); }
+                            } catch { setNostrStatus('error'); }
+                            setTimeout(() => setNostrStatus(''), 3000);
+                        }}
+                        className={`w-full py-2 font-mono font-bold text-[10px] uppercase border-2 border-black dark:border-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] active:translate-y-[1px] active:shadow-none ${nostrStatus === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-white dark:bg-zinc-900 dark:text-white hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black'}`}
+                    >
+                        {nostrStatus === 'saving' ? 'Saving...' : nostrStatus === 'success' ? 'Nostr Identity Linked' : 'Update Nostr Pubkey'}
+                    </button>
+                    <p className="text-[8px] text-gray-400 dark:text-gray-500 font-mono italic">
+                        * Enables username@goxmr.click as your NIP-05 Nostr identity. Works with CakeWallet too.
+                    </p>
+                </div>
+            </div>
+
+            {/* Email Notifications */}
+            <div className="pt-4 border-t-2 border-dashed border-gray-200 dark:border-zinc-800 mt-4">
+                <label className="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2">Email Notifications</label>
+                <div className="space-y-3">
+                    <input
+                        type="email"
+                        placeholder="your@email.com (optional)"
+                        value={notifEmail}
+                        onChange={e => setNotifEmail(e.target.value)}
+                        className="w-full border-2 border-black dark:border-white p-2 font-mono text-[10px] dark:bg-zinc-800 dark:text-white"
+                    />
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={notifEnabled} onChange={e => setNotifEnabled(e.target.checked)} className="w-4 h-4 accent-monero-orange" />
+                        <span className="font-mono text-[10px] dark:text-white">Enable email notifications (orders, messages, etc.)</span>
+                    </label>
+                    <button
+                        onClick={async () => {
+                            const token = localStorage.getItem('goxmr_token');
+                            setNotifStatus('saving');
+                            try {
+                                const res = await fetch('/api/me/notifications', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                    body: JSON.stringify({ email: notifEmail, enabled: notifEnabled })
+                                });
+                                setNotifStatus(res.ok ? 'success' : 'error');
+                            } catch { setNotifStatus('error'); }
+                            setTimeout(() => setNotifStatus(''), 3000);
+                        }}
+                        className={`w-full py-2 font-mono font-bold text-[10px] uppercase border-2 border-black dark:border-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] active:translate-y-[1px] active:shadow-none ${notifStatus === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-white dark:bg-zinc-900 dark:text-white hover:bg-black dark:hover:bg-white hover:text-white dark:hover:text-black'}`}
+                    >
+                        {notifStatus === 'saving' ? 'Saving...' : notifStatus === 'success' ? 'Notifications Updated' : 'Save Notification Settings'}
+                    </button>
+                    {/* Replaces the old single-line note with a real status panel —
+                        shows green when the mailer will auto-PGP-encrypt, amber when
+                        notifications would go out plaintext. */}
+                    <EmailPgpStatusCard
+                        hasPgpKey={!!hasPgp}
+                        hasNotificationEmail={!!notifEmail}
+                        onJumpToPgp={() => {
+                            const el = document.querySelector('[data-pgp-key-input]');
+                            if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                    />
+                </div>
+            </div>
+
+            {/* Federated Identity Hub (NIP-05 + Mastodon + OpenAlias) */}
+            <div className="pt-4 border-t-2 border-dashed border-gray-200 dark:border-zinc-800 mt-4">
+                <FederationSettings username={username} />
+            </div>
+
+            {/* PGP DMs inbox moved to its own dashboard section (10_PGP_DIRECT_MSGS)
+                so it's discoverable from the nav with an unread badge, instead of
+                buried inside Settings. */}
+
+            {/* Self-destruct timer (different from full account delete below) */}
+            <div className="pt-4 border-t-2 border-dashed border-gray-200 dark:border-zinc-800 mt-4">
+                <SelfDestructSettings />
+            </div>
+
             <div className="pt-8 mt-8 border-t-4 border-double border-red-200 dark:border-red-900/50">
                 <div className="bg-red-50 dark:bg-red-900/10 border-2 border-red-600 p-4">
                     <h4 className="font-mono font-black text-red-600 dark:text-red-500 uppercase text-xs mb-4 flex items-center gap-2">

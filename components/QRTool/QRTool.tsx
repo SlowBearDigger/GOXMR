@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import QRCodeStyling, { CornerDotType, CornerSquareType, DotType } from 'qr-code-styling';
-import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
 import { QrForm } from './QRForm';
@@ -56,7 +55,6 @@ export const QRTool: React.FC = () => {
     const [gradientColor, setGradientColor] = useState<string>('#000000');
     const [gradientType, setGradientType] = useState<GradientType>('linear');
 
-    const [isLoading, setIsLoading] = useState<boolean>(false);
     const [qrInstance, setQrInstance] = useState<QRCodeStyling | null>(null);
     const [activePreset, setActivePreset] = useState<string | null>(null);
     const [codeSnippet, setCodeSnippet] = useState<string>('');
@@ -269,7 +267,6 @@ export const QRTool: React.FC = () => {
                     useGradient={useGradient} onUseGradientChange={setUseGradient}
                     gradientColor={gradientColor} onGradientColorChange={setGradientColor}
                     gradientType={gradientType} onGradientTypeChange={setGradientType}
-                    isLoading={isLoading}
                     presets={presets} onApplyPreset={applyPreset} onRandomize={handleRandomize}
                     activePreset={activePreset}
                     cryptoOptions={CRYPTO_OPTIONS}
@@ -278,8 +275,6 @@ export const QRTool: React.FC = () => {
                     codeSnippet={codeSnippet}
                     qrSize={qrSize} onQrSizeChange={setQrSize}
                     onDetectAndSetCrypto={detectAndSetCrypto}
-                    onVerifyClick={() => { }}
-                    isGenerated={!!content}
                 />
             </div>
 
@@ -311,7 +306,7 @@ export const QRTool: React.FC = () => {
                     <QrPreview
                         qrRef={qrRef}
                         isGenerated={!!content}
-                        isLoading={isLoading}
+                        isLoading={false}
                         onDownload={handleDownload}
                         qrInstance={qrInstance}
                         countdown={0}

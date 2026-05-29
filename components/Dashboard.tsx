@@ -5,6 +5,12 @@ import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
 import { DashboardNav } from './DashboardNav';
 import { PremiumUpgradeCard } from './PremiumUpgradeCard';
+import { showToast } from './Toast';
+import { StoreSection } from './StoreSection';
+import { AddProductModal } from './AddProductModal';
+import { MessageInbox } from './MessageInbox';
+import { PgpInbox } from './PgpInbox';
+import { MyHandlesCard } from './MyHandlesCard';
 import type { Link, Wallet } from '../types.ts';
 const INITIAL_LINKS: Link[] = [];
 const INITIAL_WALLETS: Wallet[] = [];
@@ -58,7 +64,7 @@ const IconPicker = ({ currentIcon, onSelect }: { currentIcon: string, onSelect: 
     );
 };
 export const Dashboard: React.FC = () => {
-    const { setActiveSection: setGlobalSection } = useOutletContext<{ setActiveSection: (section: string) => void }>();
+    const { setActiveSection: setGlobalSection } = useOutletContext<{ setActiveSection: (section: 'home' | 'learn' | 'guide' | 'tools' | 'contribute') => void }>();
     const [links, setLinks] = useState<Link[]>(INITIAL_LINKS);
     const [wallets, setWallets] = useState<Wallet[]>(INITIAL_WALLETS);
     const [activeSection, setActiveSection] = useState('identity');
@@ -94,7 +100,10 @@ export const Dashboard: React.FC = () => {
     const [textColor, setTextColor] = useState('');
     const [buttonColor, setButtonColor] = useState('');
     const [activeProtocol, setActiveProtocol] = useState('DEFAULT');
-    const [username, setUsername] = useState('Loading...');
+    // Initial state must NOT be a literal username — child components fetch /api/...{username}
+    // and would 404 against any placeholder. Empty string acts as "not loaded yet" and effects
+    // that depend on username can guard with `if (!username) return;`.
+    const [username, setUsername] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [bio, setBio] = useState('');
     const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -109,6 +118,9 @@ export const Dashboard: React.FC = () => {
     const [premiumActivatedAt, setPremiumActivatedAt] = useState<string | null>(null);
     const [userSignals, setUserSignals] = useState<any[]>([]);
     const [userDrops, setUserDrops] = useState<any[]>([]);
+    const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<any>(null);
+    const [navNotifications, setNavNotifications] = useState({ store_orders: 0, unread_messages: 0, deadman_active: 0 });
 
     const fetchUserContent = async () => {
         const token = localStorage.getItem('goxmr_token');
@@ -207,6 +219,15 @@ export const Dashboard: React.FC = () => {
             const res = await fetch('/api/me', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            // Stale or invalid token (e.g. JWT_SECRET rotated during a migration).
+            // Drop it and bounce to login so the user gets a fresh session instead of
+            // a half-broken dashboard with empty data and 403 spam.
+            if (res.status === 401 || res.status === 403) {
+                localStorage.removeItem('goxmr_token');
+                localStorage.removeItem('goxmr_user');
+                window.location.href = '/?session=expired';
+                return;
+            }
             if (res.ok) {
                 const data = await res.json();
                 setUsername(data.username);
@@ -268,17 +289,32 @@ export const Dashboard: React.FC = () => {
         }
     };
 
+    const fetchNotificationSummary = async () => {
+        const token = localStorage.getItem('goxmr_token');
+        if (!token) return;
+        try {
+            const res = await fetch('/api/me/notifications/summary', { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) setNavNotifications(await res.json());
+        } catch { }
+    };
+
     useEffect(() => {
         const init = async () => {
             await fetchProfile();
             await fetchPremiumStatus();
             await fetchUserContent();
+            await fetchNotificationSummary();
         };
         init();
 
+        // Poll notifications every 60s
+        const notifInterval = setInterval(fetchNotificationSummary, 60000);
         const handleUpdate = () => fetchUserContent();
         window.addEventListener('goxmr_content_update', handleUpdate);
-        return () => window.removeEventListener('goxmr_content_update', handleUpdate);
+        return () => {
+            clearInterval(notifInterval);
+            window.removeEventListener('goxmr_content_update', handleUpdate);
+        };
     }, []);
     const [isDeploying, setIsDeploying] = useState(false);
     const [isDeploySuccess, setIsDeploySuccess] = useState(false);
@@ -323,11 +359,15 @@ export const Dashboard: React.FC = () => {
             });
             if (res.ok) {
                 setIsDeploySuccess(true);
-                await fetchProfile(); // Refetch to get updated database IDs
-                setTimeout(() => setIsDeploySuccess(false), 3000);
+                showToast('Profile deployed successfully', 'success');
+                await fetchProfile();
+                setTimeout(() => setIsDeploySuccess(false), 5000);
+            } else {
+                showToast('Deploy failed. Please try again.', 'error');
             }
         } catch (e) {
             console.error(e);
+            showToast('Network error during deploy', 'error');
         } finally {
             setIsDeploying(false);
         }
@@ -335,7 +375,7 @@ export const Dashboard: React.FC = () => {
     const saveProfileText = async () => {
         const token = localStorage.getItem('goxmr_token');
         try {
-            await fetch('/api/me', {
+            const res = await fetch('/api/me', {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -343,8 +383,11 @@ export const Dashboard: React.FC = () => {
                 },
                 body: JSON.stringify({ display_name: displayName, bio })
             });
+            if (res.ok) showToast('Profile saved', 'success', 2000);
+            else showToast('Failed to save profile', 'error');
         } catch (e) {
             console.error(e);
+            showToast('Network error', 'error');
         }
     };
     const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'profile' | 'banner' | 'qr_logo' | 'audio') => {
@@ -461,7 +504,7 @@ export const Dashboard: React.FC = () => {
     };
     useEffect(() => {
         const handleScroll = () => {
-            const sections = ['identity', 'signals', 'treasury', 'qr-foundry', 'design', 'settings'];
+            const sections = ['identity', 'profile-links', 'treasury', 'assets', 'qr-foundry', 'design', 'store', 'messages', 'settings'];
             const scrollPosition = window.scrollY + 200;
             for (const section of sections) {
                 const element = document.getElementById(section);
@@ -521,10 +564,17 @@ export const Dashboard: React.FC = () => {
                         isDeploying={isDeploying}
                         onDeploy={handleDeploy}
                         isSuccess={isDeploySuccess}
+                        notifications={navNotifications}
                     />
                 </div>
                 { }
                 <div className="lg:w-3/4 flex flex-col gap-12 transition-colors duration-300">
+                    {/* Section 00 — quick-copy of the three handles every user gets.
+                        Lives ABOVE identity so it's the first thing visible after login. */}
+                    <MyHandlesCard
+                        username={username}
+                        hasXmrWallet={wallets.some(w => w.currency === 'XMR' && w.address)}
+                    />
                     { }
                     <section id="identity" className="scroll-mt-32">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">
@@ -565,7 +615,7 @@ export const Dashboard: React.FC = () => {
 
                                 <div className="p-6 pt-0 -mt-12 relative flex flex-col md:flex-row gap-6 items-end">
                                     <div className="relative group/profile">
-                                        <div className="w-24 h-24 rounded-full border-4 border-white dark:border-zinc-900 bg-gray-100 dark:bg-zinc-800 overflow-hidden shadow-lg relative">
+                                        <div className="w-24 h-24 rounded-full border-4 border-white dark:border-zinc-900 bg-gray-100 dark:bg-zinc-800 overflow-hidden relative">
                                             {profileImage ? (
                                                 <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
                                             ) : (
@@ -577,7 +627,7 @@ export const Dashboard: React.FC = () => {
                                         </div>
                                         <button
                                             onClick={() => fileInputRefProfile.current?.click()}
-                                            className="absolute bottom-0 right-0 bg-monero-orange text-white p-1.5 rounded-full hover:scale-110 transition-transform shadow-lg"
+                                            className="absolute bottom-0 right-0 bg-monero-orange text-white p-1.5 rounded-full hover:scale-110 transition-transform"
                                         >
                                             <Camera size={12} />
                                         </button>
@@ -1252,6 +1302,36 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </section>
                     { }
+                    <section id="store" className="scroll-mt-32">
+                        <div className="mb-4 flex items-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
+                            <h2 className="font-mono font-black uppercase tracking-tighter dark:text-white">08_STORE_OPS</h2>
+                        </div>
+                        <StoreSection
+                            username={username}
+                            onOpenAddProduct={(product?: any) => {
+                                setEditingProduct(product || null);
+                                setIsAddProductOpen(true);
+                            }}
+                        />
+                    </section>
+
+                    <section id="messages" className="scroll-mt-32">
+                        <div className="mb-4 flex items-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
+                            <h2 className="font-mono font-black uppercase tracking-tighter dark:text-white">09_ENCRYPTED_INBOX</h2>
+                        </div>
+                        <MessageInbox />
+                    </section>
+
+                    <section id="pgp-dms" className="scroll-mt-32">
+                        <div className="mb-4 flex items-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
+                            <h2 className="font-mono font-black uppercase tracking-tighter dark:text-white">10_PGP_DIRECT_MSGS</h2>
+                            <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                                — peer-to-peer chat, ciphertext-at-rest
+                            </span>
+                        </div>
+                        <PgpInbox />
+                    </section>
+
                     <section id="settings" className="scroll-mt-32 pb-32">
                         <Settings
                             links={links}
@@ -1267,6 +1347,16 @@ export const Dashboard: React.FC = () => {
                     </section>
                 </div>
             </div >
+
+            {isAddProductOpen && (
+                <AddProductModal
+                    isOpen={isAddProductOpen}
+                    onClose={() => { setIsAddProductOpen(false); setEditingProduct(null); }}
+                    onSuccess={() => { setIsAddProductOpen(false); setEditingProduct(null); }}
+                    username={username}
+                    initialProduct={editingProduct}
+                />
+            )}
         </div >
     );
 };

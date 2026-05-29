@@ -4,9 +4,11 @@ import { SignalsTool } from './Tools/SignalsTool';
 import { DropsTool } from './Tools/DropsTool';
 import { GlitchText } from './GlitchText';
 import { PremiumUpgradeCard } from './PremiumUpgradeCard';
-import { Wrench, QrCode, Link2, Lock, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Wrench, QrCode, Link2, Lock, ArrowLeft, ShieldCheck, Box, Clock } from 'lucide-react';
+import { BlockExplorer } from './Tools/BlockExplorer';
+import { DeadMansSwitchTool } from './Tools/DeadMansSwitchTool';
 
-type ToolView = 'hub' | 'qr' | 'signals' | 'drops';
+type ToolView = 'hub' | 'qr' | 'signals' | 'drops' | 'explorer' | 'deadman';
 
 export const Tools: React.FC = () => {
     const [view, setView] = useState<ToolView>('hub');
@@ -29,7 +31,7 @@ export const Tools: React.FC = () => {
                 if (data.activatedAt) setPremiumActivatedAt(data.activatedAt);
             }
         } catch (e) {
-            console.error(e);
+            console.error('Premium status check failed:', e);
         }
     };
 
@@ -105,6 +107,20 @@ export const Tools: React.FC = () => {
                         description="Zero-knowledge encrypted notes. Content is encrypted client-side with AES or PGP. Burn-after-read protocol."
                         badge="NEW"
                     />
+                    <ToolCard
+                        id="explorer"
+                        icon={Box}
+                        title="BLOCK_EXPLORER"
+                        description="Sovereign Monero blockchain visualization. Verify transactions, monitor block height, and explore the chain in real-time."
+                        badge="BETA"
+                    />
+                    <ToolCard
+                        id="deadman"
+                        icon={Clock}
+                        title="DEAD MAN'S SWITCH"
+                        description="Scheduled encrypted release. If you don't check in, your message is automatically published as a drop."
+                        badge="PREMIUM"
+                    />
                 </div>
 
                 {isLoggedIn && (
@@ -152,26 +168,37 @@ export const Tools: React.FC = () => {
                 </button>
             </div>
 
-            <div className="mb-12 flex items-center gap-6">
-                <div className="bg-monero-orange p-4 border-4 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    {view === 'qr' && <QrCode size={40} className="text-white" />}
-                    {view === 'signals' && <Link2 size={40} className="text-white" />}
-                    {view === 'drops' && <Lock size={40} className="text-white" />}
-                </div>
-                <div>
-                    <h2 className="text-4xl md:text-6xl font-black uppercase tracking-tighter dark:text-white leading-none">
-                        {view === 'qr' ? 'QR FOUNDRY' : view === 'signals' ? 'SIGNALS' : 'DEAD DROPS'}
-                    </h2>
-                    <p className="font-mono text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1 opacity-60">
-                        {view === 'qr' ? 'GEN_PATH: sov_utility_01' : view === 'signals' ? 'GEN_PATH: sov_utility_02' : 'GEN_PATH: sov_utility_03'}
-                    </p>
-                </div>
-            </div>
+            {(() => {
+                // single source of truth for sub-view metadata so the header + icon stay in sync
+                const META: Record<Exclude<ToolView, 'hub'>, { icon: any; title: string; path: string }> = {
+                    qr:       { icon: QrCode, title: 'QR FOUNDRY',     path: 'sov_utility_01' },
+                    signals:  { icon: Link2,  title: 'SIGNALS',        path: 'sov_utility_02' },
+                    drops:    { icon: Lock,   title: 'DEAD DROPS',     path: 'sov_utility_03' },
+                    explorer: { icon: Box,    title: 'BLOCK_EXPLORER', path: 'sov_utility_04' },
+                    deadman:  { icon: Clock,  title: "DEAD MAN'S SWITCH", path: 'sov_utility_05' },
+                };
+                const meta = META[view as Exclude<ToolView, 'hub'>];
+                if (!meta) return null;
+                const Icon = meta.icon;
+                return (
+                    <div className="mb-12 flex items-center gap-6">
+                        <div className="bg-monero-orange p-4 border-4 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                            <Icon size={40} className="text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-4xl md:text-6xl font-black uppercase tracking-tighter dark:text-white leading-none">{meta.title}</h2>
+                            <p className="font-mono text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1 opacity-60">GEN_PATH: {meta.path}</p>
+                        </div>
+                    </div>
+                );
+            })()}
 
             <div className="mt-8">
                 {view === 'qr' && <QRTool />}
                 {view === 'signals' && <SignalsTool isLoggedIn={isLoggedIn} isPremium={isPremium} />}
                 {view === 'drops' && <DropsTool isLoggedIn={isLoggedIn} isPremium={isPremium} />}
+                {view === 'explorer' && <BlockExplorer />}
+                {view === 'deadman' && <DeadMansSwitchTool isLoggedIn={isLoggedIn} isPremium={isPremium} />}
             </div>
         </div>
     );

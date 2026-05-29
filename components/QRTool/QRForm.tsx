@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { ShapeType, CornerType, GradientType, Preset, CryptoType, CustomField } from '../../types';
-import { Upload, ChevronDown, Check, Zap, Settings, Code, Image as ImageIcon, Trash2, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronDown, Zap, Settings, Code, Image as ImageIcon, Trash2, Plus, RefreshCw } from 'lucide-react';
 
 interface QrFormProps {
     content: string; onContentChange: (v: string) => void;
@@ -22,10 +22,6 @@ interface QrFormProps {
     useGradient: boolean; onUseGradientChange: (v: boolean) => void;
     gradientColor: string; onGradientColorChange: (v: string) => void;
     gradientType: GradientType; onGradientTypeChange: (v: GradientType) => void;
-
-    isLoading: boolean;
-    isGenerated: boolean;
-    onVerifyClick: () => void;
 
     presets: Preset[];
     onApplyPreset: (preset: Preset) => void;
@@ -65,7 +61,7 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
         onLogoChange, color, onColorChange, shape, onShapeChange, cornerType, onCornerChange,
         backgroundColor, onBackgroundColorChange, useGradient, onUseGradientChange, gradientColor, onGradientColorChange, gradientType, onGradientTypeChange,
         presets, onApplyPreset, onRandomize, activePreset, cryptoOptions, selectedCrypto, onCryptoChange,
-        codeSnippet, qrSize, onQrSizeChange, onDetectAndSetCrypto, onVerifyClick
+        codeSnippet, qrSize, onQrSizeChange, onDetectAndSetCrypto,
     } = props;
 
     const currentCrypto = cryptoOptions.find(c => c.id === selectedCrypto);
@@ -79,7 +75,8 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
     };
 
     const addCustomField = () => {
-        onCustomFieldsChange([...customFields, { id: Math.random().toString(36).substr(2, 9), label: '', value: '' }]);
+        // .substr is deprecated — use slice for the same result
+        onCustomFieldsChange([...customFields, { id: Math.random().toString(36).slice(2, 11), label: '', value: '' }]);
     };
 
     const updateCustomField = (id: string, key: 'label' | 'value', value: string) => {
@@ -132,21 +129,13 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
                             placeholder={currentCrypto?.placeholder}
                         />
 
-                        <div className="flex justify-between items-center h-6">
-                            {detectedCrypto && (
+                        {detectedCrypto && (
+                            <div className="h-6 flex items-center">
                                 <span className="text-[10px] font-black bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 border border-green-700/20 uppercase">
                                     DETECTED: {detectedCrypto}
                                 </span>
-                            )}
-                            {!isCustom && content && (
-                                <button
-                                    onClick={onVerifyClick}
-                                    className="ml-auto flex items-center gap-1.5 text-[10px] font-black text-red-600 dark:text-red-400 hover:underline border-2 border-red-600/20 px-2 py-0.5"
-                                >
-                                    <ShieldCheck size={12} /> VERIFY_STRING
-                                </button>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className={`p-4 border-2 transition-all ${invoiceMode ? 'border-monero-orange bg-monero-orange/5' : 'border-black dark:border-white opacity-50'}`}>
@@ -248,7 +237,7 @@ export const QrForm: React.FC<QrFormProps> = (props) => {
                         <div className="border-2 border-black dark:border-zinc-700 p-4 space-y-4">
                             <label className="block text-[10px] font-black uppercase dark:text-white">BACKGROUND_LAYER</label>
                             <div className="flex items-center gap-3">
-                                <input type="color" value={backgroundColor} onChange={(e) => onBackgroundColorChange(e.target.value)} className="h-8 w-16 cursor-pointer border-2 border-black p-0.5 bg-white" />
+                                <input type="color" value={backgroundColor} onChange={(e) => onBackgroundColorChange(e.target.value)} className="h-8 w-16 cursor-pointer border-2 border-black dark:border-white p-0.5 bg-white" />
                                 <span className="text-[10px] font-black font-mono uppercase bg-black text-white px-2 py-1">{backgroundColor}</span>
                             </div>
                         </div>

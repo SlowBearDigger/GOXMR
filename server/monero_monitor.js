@@ -8,7 +8,11 @@ class MoneroMonitor {
         this.wallet = null;
         this.isSyncing = false;
         this.lastBalance = 0.0;
-        this.lastHeight = 0;
+        this.lastHeight = 3572608;
+        this.daemonHeight = 0;
+        this.daemonUrl = '';
+        this.isDaemonConnected = false;
+        this.lastError = null;
         this.walletPath = process.env.MONERO_WALLET_PATH ? path.resolve(process.env.MONERO_WALLET_PATH) : path.resolve('./wallet_data/dev_fund_wallet');
         this.statusMessage = 'Initializing...';
 
@@ -25,16 +29,36 @@ class MoneroMonitor {
         }
     }
 
+    // Build prioritized daemon URL list from env: MONERO_NODE_URL is primary,
+    // MONERO_NODE_FALLBACKS is a comma/space-separated list. Each entry is normalized
+    // to include protocol (https for :443 or no port, http otherwise).
+    _buildNodeList() {
+        const normalize = (u) => {
+            u = u.trim();
+            if (!u) return null;
+            if (!u.startsWith('http://') && !u.startsWith('https://')) {
+                u = (u.includes(':443') || !u.includes(':')) ? ('https://' + u) : ('http://' + u);
+            }
+            return u;
+        };
+        const primary = (process.env.MONERO_WALLET_RPC_URL || process.env.MONERO_NODE_URL || '').trim();
+        const fallbacks = (process.env.MONERO_NODE_FALLBACKS || '').split(/[,\s]+/).filter(Boolean);
+        return [primary, ...fallbacks]
+            .map(normalize)
+            .filter(Boolean)
+            .filter((u, i, arr) => arr.indexOf(u) === i); // dedupe
+    }
+
     async init() {
         console.log('[MONERO] Initializing Monitor Service...');
         try {
-            const address = (process.env.MONERO_WALLET_ADDRESS || '').trim();
+            const address = (process.env.MONERO_WALLET_ADDRESS || process.env.MONERO_PRIMARY_ADDRESS || '').trim();
             const viewKey = (process.env.MONERO_VIEW_KEY || '').trim();
-            let daemonUrl = (process.env.MONERO_WALLET_RPC_URL || process.env.MONERO_NODE_URL || 'https://node.monerohash.com:443').trim();
-
-            if (!daemonUrl.startsWith('http://') && !daemonUrl.startsWith('https://')) {
-                daemonUrl = 'https://' + daemonUrl;
-            }
+            this.nodes = this._buildNodeList();
+            if (this.nodes.length === 0) this.nodes = ['https://xmr-node.cakewallet.com:18081'];
+            this.activeNodeIdx = 0;
+            this.daemonUrl = this.nodes[0];
+            console.log(`[MONERO] Daemon priority list: ${this.nodes.join(', ')}`);
 
             if (!address || !viewKey) {
                 console.warn('[MONERO] Missing credentials. Monitor disabled.');
@@ -48,10 +72,10 @@ class MoneroMonitor {
                 console.log(`[MONERO] Opening existing wallet at ${this.walletPath}`);
                 this.wallet = await monerojs.openWalletFull({
                     path: this.walletPath,
-                    password: process.env.MONERO_WALLET_PASSWORD || 'super_secret_local_password',
+                    password: process.env.MONERO_WALLET_PASSWORD || '',
                     networkType: 'mainnet'
                 });
-                await this.wallet.setDaemonConnection(daemonUrl);
+                await this.wallet.setDaemonConnection(this.daemonUrl);
             } else {
                 console.log(`[MONERO] Creating new wallet at ${this.walletPath}`);
                 const restoreHeight = Number(process.env.MONERO_RESTORE_HEIGHT) || 3300000; // Default to ~2024
@@ -59,9 +83,9 @@ class MoneroMonitor {
 
                 this.wallet = await monerojs.createWalletFull({
                     path: this.walletPath,
-                    password: process.env.MONERO_WALLET_PASSWORD || 'super_secret_local_password',
+                    password: process.env.MONERO_WALLET_PASSWORD || '',
                     networkType: 'mainnet',
-                    serverUri: daemonUrl,
+                    serverUri: this.daemonUrl,
                     primaryAddress: address,
                     privateViewKey: viewKey,
                     restoreHeight: restoreHeight
@@ -86,6 +110,8 @@ class MoneroMonitor {
         this.sync();
         setInterval(() => this.sync(), 2 * 60 * 1000); // Sync balance every 2m
         setInterval(() => this.checkPremiumPayments(), 2 * 60 * 1000); // Check payments every 2m
+        setInterval(() => this.checkStoreOrderPayments(), 2 * 60 * 1000); // Check store orders every 2m
+        setInterval(() => this.expireStaleOrders(), 15 * 60 * 1000); // Expire stale orders every 15m
     }
 
     async forceCheck() {
@@ -95,20 +121,67 @@ class MoneroMonitor {
         return this.getStatus();
     }
 
-    async sync() {
-        if (this.isSyncing) return;
-        this.isSyncing = true;
+    // Try to (re)establish a daemon connection by walking the priority list.
+    // Returns true if we got connected, false if every node failed.
+    async _ensureDaemonConnection() {
+        if (!this.wallet) return false;
         try {
+            if (await this.wallet.isConnectedToDaemon()) return true;
+        } catch { /* fall through to rotation */ }
+        const nodes = this.nodes && this.nodes.length ? this.nodes : [this.daemonUrl];
+        for (let attempt = 0; attempt < nodes.length; attempt++) {
+            const idx = (this.activeNodeIdx + attempt) % nodes.length;
+            const url = nodes[idx];
+            try {
+                console.log(`[MONERO] Trying node ${idx + 1}/${nodes.length}: ${url}`);
+                await this.wallet.setDaemonConnection(url);
+                if (await this.wallet.isConnectedToDaemon()) {
+                    this.activeNodeIdx = idx;
+                    this.daemonUrl = url;
+                    console.log(`[MONERO] Connected to ${url}`);
+                    return true;
+                }
+            } catch (e) {
+                console.warn(`[MONERO] Node ${url} failed: ${e.message}`);
+            }
+        }
+        console.error('[MONERO] All daemon candidates exhausted');
+        return false;
+    }
+
+    async sync() {
+        if (this.isSyncing || !this.wallet) return;
+        this.isSyncing = true;
+
+        try {
+            const ok = await this._ensureDaemonConnection();
+            if (!ok) {
+                this.isDaemonConnected = false;
+                this.lastError = 'No daemon reachable';
+                this.statusMessage = 'No daemon reachable';
+                return;
+            }
+
+            console.log(`[MONERO] Syncing...`);
             await this.wallet.sync();
             await this.wallet.save();
             const balanceBig = await this.wallet.getBalance();
             this.lastBalance = parseFloat(balanceBig.toString()) / 1e12;
             this.lastHeight = await this.wallet.getHeight();
+
             // Get Daemon Height to compare
-            const daemonHeight = await this.wallet.getDaemonHeight();
-            console.log(`[MONERO] Sync Complete. Balance: ${this.lastBalance} XMR. Height: ${this.lastHeight} / ${daemonHeight}`);
+            const daemonHeightRaw = await this.wallet.getDaemonHeight();
+            this.daemonHeight = Number(daemonHeightRaw.toString());
+            this.isDaemonConnected = true;
+            this.lastError = null;
+            this.statusMessage = 'Synced';
+
+            console.log(`[MONERO] Sync Complete. Balance: ${this.lastBalance} XMR. Height: ${this.lastHeight} / ${this.daemonHeight}`);
         } catch (err) {
             console.error('[MONERO] Sync Error:', err);
+            this.isDaemonConnected = false;
+            this.lastError = err.message;
+            this.statusMessage = `Sync Error: ${err.message}`;
         } finally {
             this.isSyncing = false;
         }
@@ -173,12 +246,11 @@ class MoneroMonitor {
 
                 console.log(`[MONERO] User ${user.id} (Index ${user.premium_subaddress_index}): Found ${transfers.length} transfers.`);
 
+                const MIN_CONFIRMATIONS = 1;
                 const confirmedTransfer = transfers.find(t => {
                     const data = this._getSafeTransferData(t);
                     console.log(`   -> Tx: ${data.txid}, Confs: ${data.confs}, Amount: ${data.amount} XMR`);
-                    // ALLOW 0-CONF: Accept if amount matches, regardless of confs
-                    // We trust the subaddress separation.
-                    return data.amount >= MIN_PAYMENT_AMOUNT;
+                    return data.amount >= MIN_PAYMENT_AMOUNT && data.confs >= MIN_CONFIRMATIONS;
                 });
 
                 if (confirmedTransfer) {
@@ -308,8 +380,8 @@ class MoneroMonitor {
             return { found: true, valid: false, reason: 'Amount too low (< 0.001 XMR)' };
         }
 
-        if (matchData.params?.confs === undefined || matchData.confs < 1) {
-            console.warn('[MONERO] Transaction pending (0 confs) or undefined confs. Accepting due to 0-conf policy.');
+        if (matchData.confs === undefined || matchData.confs < 1) {
+            return { found: true, valid: false, reason: `Waiting for confirmations (${matchData.confs || 0}/1)` };
         }
 
         // 5. Activate Premium
@@ -407,11 +479,122 @@ class MoneroMonitor {
         }
     }
 
+    // ============================================
+    // STORE: Seller Order Payment Verification
+    // ============================================
+
+    // For sellers with auto_verify: generate subaddress per order using platform wallet account 1
+    async getOrCreateOrderSubaddress(orderId, sellerUserId) {
+        if (!this.wallet) return null;
+
+        try {
+            // Use account 0 with a high offset to avoid collision with premium subaddresses
+            const STORE_INDEX_OFFSET = 10000;
+            const nextIndex = STORE_INDEX_OFFSET + orderId;
+
+            const subaddress = await this.wallet.getSubaddress(0, nextIndex);
+            // Store the index on the order for later verification
+            await new Promise((res) => {
+                db.run('UPDATE store_orders SET payment_subaddress_index = ? WHERE id = ?',
+                    [nextIndex, orderId], () => res());
+            });
+            return subaddress.getAddress();
+        } catch (e) {
+            console.error('[MONERO-STORE] Failed to generate order subaddress:', e.message);
+            return null;
+        }
+    }
+
+    // Check pending store orders for payments (auto_verify sellers only)
+    async checkStoreOrderPayments() {
+        if (!this.wallet) return;
+
+        try {
+            // Find pending orders that have a subaddress (auto_verify sellers)
+            const pendingOrders = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT o.id, o.payment_address, o.payment_subaddress_index, o.price_xmr, o.product_id, o.created_at
+                     FROM store_orders o
+                     JOIN store_config sc ON o.seller_id = sc.user_id
+                     WHERE o.status = 'pending' AND sc.auto_verify = 1
+                     AND o.payment_subaddress_index IS NOT NULL`,
+                    [], (err, rows) => err ? reject(err) : resolve(rows || [])
+                );
+            });
+
+            if (pendingOrders.length === 0) return;
+
+            console.log(`[MONERO-STORE] Checking ${pendingOrders.length} pending auto-verify orders...`);
+
+            for (const order of pendingOrders) {
+                // Auto-expire orders older than 48 hours
+                const orderAge = Date.now() - new Date(order.created_at).getTime();
+                if (orderAge > 48 * 60 * 60 * 1000) {
+                    await new Promise((res) => {
+                        db.run('UPDATE store_orders SET status = "expired", updated_at = CURRENT_TIMESTAMP WHERE id = ?', [order.id], () => res());
+                    });
+                    console.log(`[MONERO-STORE] Order #${order.id} expired (>48h)`);
+                    continue;
+                }
+
+                // Check all incoming transfers and look for matching amount
+                try {
+                    // Filter transfers by the specific subaddress index for this order
+                    const transfers = await this.wallet.getTransfers({
+                        accountIndex: 0,
+                        subaddressIndex: order.payment_subaddress_index,
+                        isIncoming: true
+                    });
+
+                    const matchingTransfer = transfers.find(t => {
+                        const data = this._getSafeTransferData(t);
+                        return data.amount >= order.price_xmr && data.confs >= 1;
+                    });
+
+                    if (matchingTransfer) {
+                        const data = this._getSafeTransferData(matchingTransfer);
+                        console.log(`[MONERO-STORE] Payment detected for order #${order.id}: ${data.amount} XMR, ${data.confs} confs`);
+                        // Only update status — stock decrement is handled by updateOrderStatus endpoint
+                        // to avoid double-decrement if seller also manually confirms
+                        await new Promise((res) => {
+                            db.run('UPDATE store_orders SET status = "paid", updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = "pending"',
+                                [order.id], () => res());
+                        });
+                    }
+                } catch (e) {
+                    console.error(`[MONERO-STORE] Error checking order #${order.id}:`, e.message);
+                }
+            }
+        } catch (err) {
+            console.error('[MONERO-STORE] Order Payment Check Error:', err.message);
+        }
+    }
+
+    // Expire old pending orders (for all sellers, not just auto_verify)
+    async expireStaleOrders() {
+        try {
+            await new Promise((res) => {
+                db.run(
+                    `UPDATE store_orders SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+                     WHERE status = 'pending' AND created_at < datetime('now', '-48 hours')`,
+                    [], () => res()
+                );
+            });
+        } catch (e) {
+            console.error('[MONERO-STORE] Expire stale orders error:', e.message);
+        }
+    }
+
     getStatus() {
         return {
             balance: this.lastBalance,
             height: this.lastHeight,
+            daemonHeight: this.daemonHeight,
             isSyncing: this.isSyncing,
+            isDaemonConnected: this.isDaemonConnected,
+            node: this.daemonUrl,
+            error: this.lastError,
+            goal: 5.0,
             message: this.statusMessage
         };
     }

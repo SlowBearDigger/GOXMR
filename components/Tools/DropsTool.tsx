@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Shield, Clock, Copy, Check, Lock, AlertCircle, Loader2, Trash2, Eye, Zap } from 'lucide-react';
+import { FileText, Shield, Clock, Copy, Check, Lock, AlertCircle, Loader2, Trash2, Eye, Zap, Key } from 'lucide-react';
 import { AltchaWidget } from '../AltchaWidget';
 import * as openpgp from 'openpgp';
 
@@ -32,7 +32,9 @@ export const DropsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> = 
             {
                 name: 'PBKDF2',
                 salt: salt,
-                iterations: 100000,
+                // OWASP 2024 baseline for PBKDF2-SHA256. ResolverPage decrypts with a
+                // try-both fallback so legacy 100k drops still open.
+                iterations: 600000,
                 hash: 'SHA-256'
             },
             keyMaterial,
@@ -57,7 +59,16 @@ export const DropsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> = 
     };
 
     const handleCreate = async () => {
-        if (!content) return;
+        if (!content) {
+            setErrorMsg('Content is required');
+            setStatus('error');
+            return;
+        }
+        if (method === 'AES' && (!password || password.length < 8)) {
+            setErrorMsg('AES requires a passphrase of at least 8 characters');
+            setStatus('error');
+            return;
+        }
         if (method === 'PGP' && (!isLoggedIn || !isPremium || !pgpPublicKey)) {
             setErrorMsg('Professional PGP encryption requires premium status');
             setStatus('error');
@@ -275,6 +286,11 @@ export const DropsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> = 
                         </div>
                     )}
 
+                    {(!content || !altchaPayload) && status === 'idle' && (
+                        <p className="text-[10px] font-mono font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-center">
+                            {!content ? 'Type a message to continue →' : !altchaPayload ? 'Complete the verification above →' : ''}
+                        </p>
+                    )}
                     <button
                         onClick={handleCreate}
                         disabled={status === 'encrypting' || status === 'sending' || !content || !altchaPayload}
@@ -317,9 +333,3 @@ export const DropsTool: React.FC<{ isLoggedIn: boolean; isPremium: boolean }> = 
     );
 };
 
-// Re-using icon for clarity in component
-const Key = ({ className, size }: { className?: string, size?: number }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3m-3-3l-2.5-2.5" />
-    </svg>
-);

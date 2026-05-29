@@ -21,9 +21,15 @@ export const ResolverPage: React.FC<{ mode: 'signal' | 'drop' }> = ({ mode }) =>
         setStatus('loading');
         try {
             const url = mode === 'signal' ? `/api/resolve/signal/${code}` : `/api/resolve/drop/${code}`;
-            const query = pass ? `?password=${encodeURIComponent(pass)}` : '';
+            // Password sent via POST body, not query params
 
-            const resp = await fetch(url + query);
+            const fetchOpts: RequestInit = {};
+            if (pass) {
+                fetchOpts.method = 'POST';
+                fetchOpts.headers = { 'Content-Type': 'application/json' };
+                fetchOpts.body = JSON.stringify({ password: pass });
+            }
+            const resp = await fetch(url, fetchOpts);
             const resData = await resp.json();
 
             if (resp.status === 410) {
@@ -40,7 +46,16 @@ export const ResolverPage: React.FC<{ mode: 'signal' | 'drop' }> = ({ mode }) =>
             }
 
             if (mode === 'signal') {
-                window.location.href = resData.url;
+                // Validate URL before redirecting
+                try {
+                    const parsed = new URL(resData.url);
+                    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid protocol');
+                    window.location.href = resData.url;
+                } catch {
+                    setStatus('error');
+                    setErrorMsg('Invalid redirect URL');
+                    return;
+                }
             } else {
                 setData(resData);
                 setStatus('password_required'); // Drops ALWAYS require a key (pass or PGP) even if not technically "gated" by server
@@ -52,78 +67,75 @@ export const ResolverPage: React.FC<{ mode: 'signal' | 'drop' }> = ({ mode }) =>
     };
 
     const handlePasswordSubmit = async () => {
-        if (!password) return;
+        if (!password) {
+            setErrorMsg('Enter the decryption key first');
+            setStatus('error');
+            return;
+        }
 
         if (mode === 'signal') {
             resolve(password);
-        } else {
-            // Drop Decryption Logic
-            setStatus('decrypting');
-            try {
-                if (data.method === 'AES') {
-                    const decrypted = await decryptAES(data.content, password);
-                    setDecryptedContent(decrypted);
-                } else {
-                    // PGP (Password here is the Private Key)
-                    // Note: For PGP, "password" field is used to paste the Private Key or we assume the user has it.
-                    // Actually, if it's PGP, the user needs to decrypt it themselves or paste their private key here.
-                    // For sovereignty, we'll allow pasting the private key + pass if needed, or just tell them it's PGP.
-                    // Let's stick to AES decryption primarily, and for PGP just show the blob if they don't provide key.
-                    // But wait, the user wants it professional.
-                    setErrorMsg("PGP decryption not implemented in-browser yet. Please use your local PGP client.");
-                    setStatus('error');
-                    return;
-                }
-                setStatus('success');
-            } catch (err) {
-                setErrorMsg('Decryption failed. Invalid key or corrupted data.');
-                setStatus('error');
+            return;
+        }
+        // Drop Decryption
+        setStatus('decrypting');
+        try {
+            if (data.method === 'AES') {
+                const decrypted = await decryptAES(data.content, password);
+                setDecryptedContent(decrypted);
+            } else if (data.method === 'PGP') {
+                // The "password" textarea accepts the recipient's PGP private key block.
+                // openpgp.js handles decryption client-side — the cleartext never reaches us.
+                const isArmored = /-----BEGIN PGP PRIVATE KEY BLOCK-----/.test(password);
+                if (!isArmored) throw new Error('Paste your PGP PRIVATE KEY BLOCK to decrypt this drop.');
+                const privateKey = await openpgp.readPrivateKey({ armoredKey: password });
+                const message = await openpgp.readMessage({ armoredMessage: data.content });
+                const { data: plain } = await openpgp.decrypt({ message, decryptionKeys: privateKey });
+                setDecryptedContent(String(plain));
+            } else {
+                throw new Error(`Unknown encryption method: ${data.method}`);
             }
+            setStatus('success');
+        } catch (err: any) {
+            setErrorMsg(err?.message || 'Decryption failed. Invalid key or corrupted data.');
+            setStatus('error');
         }
     };
 
-    const decryptAES = async (base64: string, pass: string) => {
-        const combined = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    // Decryption supports two PBKDF2 iteration counts:
+    //   - 600,000 (new format, OWASP 2024 baseline)
+    //   - 100,000 (legacy format, drops created before the bump)
+    // We try the new format first and fall back to legacy on AES-GCM auth failure.
+    // Wrong password fails both paths and the catch in handlePasswordSubmit reports it.
+    const decryptAESWithIters = async (combined: Uint8Array, pass: string, iters: number) => {
         const salt = combined.slice(0, 16);
         const iv = combined.slice(16, 16 + 12);
         const data = combined.slice(16 + 12);
-
         const enc = new TextEncoder();
         const keyMaterial = await window.crypto.subtle.importKey(
-            'raw',
-            enc.encode(pass),
-            { name: 'PBKDF2' },
-            false,
-            ['deriveKey']
+            'raw', enc.encode(pass), { name: 'PBKDF2' }, false, ['deriveKey']
         );
         const key = await window.crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: salt,
-                iterations: 100000,
-                hash: 'SHA-256'
-            },
-            keyMaterial,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['decrypt']
+            { name: 'PBKDF2', salt, iterations: iters, hash: 'SHA-256' },
+            keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
         );
-
-        const decrypted = await window.crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: iv },
-            key,
-            data
-        );
-
-        return new TextDecoder().decode(decrypted);
+        const plain = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return new TextDecoder().decode(plain);
+    };
+    const decryptAES = async (base64: string, pass: string) => {
+        const combined = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        try { return await decryptAESWithIters(combined, pass, 600000); }
+        catch { return await decryptAESWithIters(combined, pass, 100000); }
     };
 
-    if (status === 'loading') {
+    if (status === 'loading' || status === 'decrypting') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black p-4">
                 <div className="flex flex-col items-center gap-4">
                     <Loader2 className="animate-spin text-monero-orange" size={48} />
-                    <p className="font-mono font-black text-xs uppercase tracking-tighter dark:text-white">Resolving Sovereign Entity...</p>
+                    <p className="font-mono font-black text-xs uppercase tracking-tighter dark:text-white">
+                        {status === 'decrypting' ? 'Decrypting in your browser…' : 'Resolving Sovereign Entity...'}
+                    </p>
                 </div>
             </div>
         );
@@ -153,19 +165,34 @@ export const ResolverPage: React.FC<{ mode: 'signal' | 'drop' }> = ({ mode }) =>
                         <h2 className="font-mono font-black text-xl uppercase dark:text-white">Gatekeeper Protocol</h2>
                     </div>
                     <p className="text-xs font-bold text-gray-400 uppercase mb-6 leading-tight">
-                        {mode === 'signal' ? "This redirection is protected by a cryptographic gate." : "This dead drop is client-side encrypted. Enter the decryption key."}
+                        {mode === 'signal'
+                            ? 'This redirection is protected by a cryptographic gate.'
+                            : data?.method === 'PGP'
+                                ? 'This drop is PGP-encrypted. Paste your private key block to decrypt it in your browser.'
+                                : 'This dead drop is client-side encrypted. Enter the passphrase.'}
                     </p>
 
                     <div className="flex flex-col gap-4">
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
-                            placeholder="Enter Decryption Key"
-                            className="w-full p-4 font-mono font-bold border-4 border-black dark:border-white outline-none focus:bg-gray-50 dark:focus:bg-zinc-800 dark:bg-zinc-950 dark:text-white"
-                            autoFocus
-                        />
+                        {mode === 'drop' && data?.method === 'PGP' ? (
+                            <textarea
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----&#10;…&#10;-----END PGP PRIVATE KEY BLOCK-----"
+                                rows={8}
+                                className="w-full p-4 font-mono text-[10px] border-4 border-black dark:border-white outline-none focus:bg-gray-50 dark:focus:bg-zinc-800 dark:bg-zinc-950 dark:text-white resize-none"
+                                autoFocus
+                            />
+                        ) : (
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+                                placeholder="Enter Decryption Key"
+                                className="w-full p-4 font-mono font-bold border-4 border-black dark:border-white outline-none focus:bg-gray-50 dark:focus:bg-zinc-800 dark:bg-zinc-950 dark:text-white"
+                                autoFocus
+                            />
+                        )}
                         <button
                             onClick={handlePasswordSubmit}
                             className="bg-black dark:bg-white text-white dark:text-black font-bold py-4 uppercase hover:bg-monero-orange dark:hover:bg-monero-orange dark:hover:text-white transition-colors flex justify-center items-center gap-2"

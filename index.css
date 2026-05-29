@@ -205,3 +205,61 @@
     font-family: 'JetBrains Mono', monospace;
     overflow: hidden;
 }
+
+/* Toast slide-in animation */
+@keyframes slide-in {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.animate-slide-in {
+    animation: slide-in 0.25s ease-out;
+}
+
+/* Modal fade-in */
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes scale-in {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+}
+
+.animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+}
+
+/* Focus-visible ring for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid #F26822;
+    outline-offset: 2px;
+}
+
+/* Remove default outline only when NOT keyboard navigating */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Dark mode placeholder visibility */
+.dark input::placeholder,
+.dark textarea::placeholder,
+.dark select::placeholder {
+    color: #71717a; /* zinc-500 */
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #9ca3af; /* gray-400 */
+}

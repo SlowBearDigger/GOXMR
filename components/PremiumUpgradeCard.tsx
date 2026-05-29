@@ -125,51 +125,47 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                                 </div>
                             </div>
 
-                            <button
-                                onClick={onRefresh}
-                                className="w-full mt-4 flex items-center justify-center gap-2 py-2 border-2 border-black dark:border-white font-mono text-[10px] font-black uppercase hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors dark:text-white"
-                            >
-                                <RefreshCw size={12} /> Sync Status
-                            </button>
-                            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-zinc-800">
-                                <label className="text-[10px] font-bold uppercase text-gray-400 mb-2 block">Manual Validation (Optional)</label>
-                                <input
-                                    type="text"
-                                    placeholder="Paste Transaction ID (TXID)"
-                                    className="w-full text-xs p-2 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 dark:text-white font-mono placeholder-gray-400 focus:border-monero-orange outline-none"
-                                    value={txidInput}
-                                    onChange={(e) => setTxidInput(e.target.value)}
-                                />
+                            <div className="mt-4 pt-4 border-t-2 border-dashed border-gray-200 dark:border-zinc-800">
+                                <label className="text-[10px] font-black uppercase text-gray-400 dark:text-gray-500 mb-2 block tracking-widest">Manual Validation (Fast-Track)</label>
+                                <div className="flex flex-col gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Paste Transaction ID (TXID)"
+                                        className="w-full text-xs p-3 border-2 border-black dark:border-white bg-white dark:bg-zinc-950 dark:text-white font-mono placeholder-gray-400 focus:border-monero-orange outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                        value={txidInput}
+                                        onChange={(e) => setTxidInput(e.target.value)}
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            const btn = document.getElementById('force-scan-btn');
+                                            if (btn) {
+                                                btn.innerHTML = 'SCANNING BLOCKCHAIN...';
+                                                btn.setAttribute('disabled', 'true');
+                                            }
+                                            try {
+                                                const token = localStorage.getItem('goxmr_token');
+                                                await fetch('/api/me/premium/check', {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Authorization': `Bearer ${token}`,
+                                                        'Content-Type': 'application/json'
+                                                    },
+                                                    body: JSON.stringify({ txid: txidInput.trim() || undefined })
+                                                });
+                                                if (onRefresh) onRefresh();
+                                            } catch (e) { console.error(e); }
+                                            if (btn) {
+                                                btn.innerHTML = 'FORCE PAYMENT SCAN';
+                                                btn.removeAttribute('disabled');
+                                            }
+                                        }}
+                                        id="force-scan-btn"
+                                        className="w-full flex items-center justify-center gap-2 py-3 bg-black dark:bg-white text-white dark:text-black font-mono text-xs font-black uppercase hover:bg-monero-orange dark:hover:bg-monero-orange hover:text-white transition-colors shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] active:translate-y-[2px] active:shadow-none"
+                                    >
+                                        <Zap size={14} /> FORCE PAYMENT SCAN
+                                    </button>
+                                </div>
                             </div>
-                            <button
-                                onClick={async () => {
-                                    const btn = document.getElementById('force-scan-btn');
-                                    if (btn) {
-                                        btn.innerHTML = 'SCANNING BLOCKCHAIN...';
-                                        btn.setAttribute('disabled', 'true');
-                                    }
-                                    try {
-                                        const token = localStorage.getItem('goxmr_token');
-                                        await fetch('/api/me/premium/check', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Authorization': `Bearer ${token}`,
-                                                'Content-Type': 'application/json'
-                                            },
-                                            body: JSON.stringify({ txid: txidInput.trim() || undefined })
-                                        });
-                                        if (onRefresh) onRefresh();
-                                    } catch (e) { console.error(e); }
-                                    if (btn) {
-                                        btn.innerHTML = 'FORCE PAYMENT SCAN';
-                                        btn.removeAttribute('disabled');
-                                    }
-                                }}
-                                id="force-scan-btn"
-                                className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-black dark:bg-white text-white dark:text-black font-mono text-[10px] font-black uppercase hover:bg-monero-orange dark:hover:bg-monero-orange hover:text-white transition-colors"
-                            >
-                                <Zap size={12} /> FORCE PAYMENT SCAN
-                            </button>
                         </div>
                     </div>
                 ) : (

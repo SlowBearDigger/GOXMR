@@ -47,3 +47,25 @@ server/*.db-wal
 *.sw?
 node_modules
 .gemini/
+
+# v2.1 — privacy/auth secrets and pdns state
+server/.ip_hash_secret
+.ip_hash_secret
+**/pdns.sqlite3
+**/database.db
+**/database.db.*
+**/server/uploads/
+
+# session artifacts
+.claude/
+documentacion.txt
+GOXMR-main.zip
+goxmr_*.zip
+goxmr-coming-soon/
+coming-soon/
+server/index_store_addition.txt
+server/migrate_v5_public_fields.js
+server/debug_tx.js
+server/index.js.backup
+server/*copy.txt
+server/index copy.txt

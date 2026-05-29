@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link as RouterLink } from 'react-router-dom';
+import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { Twitter, Github, Globe, ExternalLink, Check, Zap, ArrowLeft, Youtube, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Shield, Cpu, AlertTriangle } from 'lucide-react';
 import { GlitchText } from './GlitchText';
+import { TrustBadge } from './TrustBadge';
+import { StoreProductGrid } from './StoreProductGrid';
+import { StoreCheckout } from './StoreCheckout';
+import { StoreDisclaimerBanner, StoreDisclaimerModal } from './StoreDisclaimer';
+import { EncryptedContactForm } from './EncryptedContactForm';
 import QRCodeStyling from 'qr-code-styling';
+import { productSlug as makeProductSlug, parseProductSlug } from '../utils/productSlug';
 
 interface UserProfile {
     banner_image?: string;
@@ -61,7 +67,9 @@ const IconRenderer = ({ name, className }: { name: string, className?: string })
 };
 
 export const PublicProfile: React.FC = () => {
-    const { username } = useParams<{ username: string }>();
+    // #7: support /:username, /:username/store, /:username/store/:productSlug
+    const { username, productSlug: urlProductSlug } = useParams<{ username: string; productSlug?: string }>();
+    const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -90,6 +98,120 @@ export const PublicProfile: React.FC = () => {
     const [tags, setTags] = useState<string[]>([]);
     const [isCakeModalOpen, setIsCakeModalOpen] = useState(false);
 
+    // Store state
+    const [hasStore, setHasStore] = useState(false);
+    const [storeProducts, setStoreProducts] = useState<any[]>([]);
+    // 3D: pagination + filters for the public store grid
+    const [storeTotal, setStoreTotal] = useState(0);
+    const [storeLimit] = useState(12);
+    const [storeOffset, setStoreOffset] = useState(0);
+    const [storeSearch, setStoreSearch] = useState('');
+    const [storeTypeFilter, setStoreTypeFilter] = useState<'' | 'physical' | 'digital' | 'service'>('');
+    const [storeLoading, setStoreLoading] = useState(false);
+    const [storeName, setStoreName] = useState('');
+    const [checkoutProduct, setCheckoutProduct] = useState<any>(null);
+    const [checkoutUnlockToken, setCheckoutUnlockToken] = useState<string | undefined>(undefined);
+    const [showDisclaimer, setShowDisclaimer] = useState(false);
+    const [pendingBuyProduct, setPendingBuyProduct] = useState<any>(null);
+
+    // 3C: unlisted-product unlock modal state
+    const [unlockOpen, setUnlockOpen] = useState(false);
+    const [unlockProductId, setUnlockProductId] = useState('');
+    const [unlockPin, setUnlockPin] = useState('');
+    const [unlockError, setUnlockError] = useState('');
+    const [unlockLoading, setUnlockLoading] = useState(false);
+
+    // #7: URL ↔ checkout sync. When the URL carries a product slug, open that product's checkout.
+    // When the URL drops the slug (e.g. browser back), close the checkout. This is what makes the
+    // back button work without us hand-coding history handling.
+    useEffect(() => {
+        if (!username) return;
+        const id = urlProductSlug ? parseProductSlug(urlProductSlug) : null;
+        // URL has no slug → close any open checkout (back-button case)
+        if (!id) {
+            if (checkoutProduct) { setCheckoutProduct(null); setCheckoutUnlockToken(undefined); }
+            return;
+        }
+        // Already showing the right one — nothing to do
+        if (checkoutProduct?.id === id) return;
+        let cancelled = false;
+        (async () => {
+            const fromList = storeProducts.find(p => p.id === id);
+            if (fromList) { if (!cancelled) setCheckoutProduct(fromList); return; }
+            try {
+                const r = await fetch(`/api/store/products/id/${id}`);
+                if (!r.ok) return;
+                const data = await r.json();
+                if (!cancelled && data.product) setCheckoutProduct(data.product);
+            } catch { /* silent */ }
+        })();
+        return () => { cancelled = true; };
+    }, [urlProductSlug, username, storeProducts]);
+
+    // 3D: paginated + filtered product fetch. Re-runs whenever a knob changes.
+    useEffect(() => {
+        if (!username || !hasStore) return;
+        let cancelled = false;
+        setStoreLoading(true);
+        const q = new URLSearchParams({ limit: String(storeLimit), offset: String(storeOffset) });
+        if (storeSearch.trim()) q.set('search', storeSearch.trim());
+        if (storeTypeFilter) q.set('product_type', storeTypeFilter);
+        fetch(`/api/store/products/${username}?${q.toString()}`)
+            .then(r => r.ok ? r.json() : { products: [], total: 0 })
+            .then(d => {
+                if (cancelled) return;
+                setStoreProducts(d.products || []);
+                setStoreTotal(d.total || 0);
+            })
+            .catch(() => {})
+            .finally(() => { if (!cancelled) setStoreLoading(false); });
+        return () => { cancelled = true; };
+    }, [username, hasStore, storeLimit, storeOffset, storeSearch, storeTypeFilter]);
+
+    const handleUnlockSubmit = async () => {
+        setUnlockError('');
+        const pid = unlockProductId.trim();
+        if (!pid || !unlockPin.trim()) {
+            setUnlockError('Enter both the product ID and the access PIN');
+            return;
+        }
+        setUnlockLoading(true);
+        try {
+            const r = await fetch(`/api/store/products/${encodeURIComponent(pid)}/unlock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: unlockPin })
+            });
+            const data = await r.json();
+            if (!r.ok) {
+                if (data.attempts_remaining !== undefined) setUnlockError(`Wrong code. ${data.attempts_remaining} attempt(s) left before lockout.`);
+                else if (data.retry_after) setUnlockError(`Locked. Try again in ~${Math.ceil(data.retry_after / 60)} min.`);
+                else setUnlockError(data.error || 'Unlock failed');
+                return;
+            }
+            const token = data.unlock_token as string;
+            // fetch the now-accessible product with the unlock token
+            const pr = await fetch(`/api/store/products/id/${encodeURIComponent(pid)}`, {
+                headers: { 'X-Unlock-Token': token }
+            });
+            const pdata = await pr.json();
+            if (!pr.ok) {
+                setUnlockError(pdata.error || 'Could not load product');
+                return;
+            }
+            // Close modal and open checkout with the unlocked product + token
+            setUnlockOpen(false);
+            setUnlockProductId('');
+            setUnlockPin('');
+            setCheckoutUnlockToken(token);
+            setCheckoutProduct(pdata.product);
+        } catch (e: any) {
+            setUnlockError('Network error');
+        } finally {
+            setUnlockLoading(false);
+        }
+    };
+
     const xmrWallet = wallets.find(w => w.currency === 'XMR');
 
     const qrRef = useRef<HTMLDivElement>(null);
@@ -102,6 +224,16 @@ export const PublicProfile: React.FC = () => {
                 const res = await fetch(`/api/user/${username}`);
                 if (!res.ok) throw new Error('Identity not found');
                 const data = await res.json();
+
+                // #8: canonicalize the URL — if the path username casing differs from the stored
+                // canonical, rewrite the URL bar via history.replaceState so links land on one
+                // canonical form. Uses replaceState (not React Router navigate) on purpose —
+                // navigate() inside an async fetch races with the component's mount and crashes
+                // the tree on a hard reload. replaceState is cosmetic; the data is already loaded.
+                if (data.username && username && data.username !== username) {
+                    const newPath = window.location.pathname.replace(`/${username}`, `/${data.username}`);
+                    window.history.replaceState({}, '', newPath + window.location.search + window.location.hash);
+                }
 
                 setProfile(data);
                 setLinks(data.links || []);
@@ -125,7 +257,19 @@ export const PublicProfile: React.FC = () => {
             }
         };
 
-        if (username) fetchUserData();
+        if (username) {
+            fetchUserData();
+            // Fetch store config (one-off); products are fetched via the paginated effect below.
+            fetch(`/api/store/config/${username}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (data) {
+                        setHasStore(true);
+                        setStoreName(data.store_name || '');
+                    }
+                })
+                .catch(() => {});
+        }
     }, [username]);
 
     useEffect(() => {
@@ -351,7 +495,7 @@ export const PublicProfile: React.FC = () => {
                         <div className="absolute top-0 right-0 w-8 h-8 sm:w-12 sm:h-12 bg-accent clip-path-polygon-[100%_0,0_0,100%_100%]"></div>
 
                         <div className="flex flex-col items-center text-center relative z-10">
-                            <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 bg-black rounded-full p-1.5 sm:p-2 border-4 border-black mb-6 sm:mb-8 relative shadow-xl transform transition-transform duration-500 hover:rotate-3" style={{ borderColor: BC }}>
+                            <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 bg-black rounded-full p-1.5 sm:p-2 border-4 border-black mb-6 sm:mb-8 relative transform transition-transform duration-500 hover:rotate-3" style={{ borderColor: BC }}>
                                 <div className="absolute inset-0 rounded-full border-4 border-accent border-t-transparent animate-spin-slow" style={{ borderColor: AC }}></div>
                                 {profile?.profile_image ? (
                                     <img src={profile.profile_image} alt="Profile" className="w-full h-full object-cover rounded-full" />
@@ -366,6 +510,10 @@ export const PublicProfile: React.FC = () => {
                                 <span className="truncate">@{username}</span>
                                 <Zap size={24} className="text-accent fill-current animate-bounce shrink-0" />
                             </h1>
+
+                            <div className="flex justify-center mb-4 relative">
+                                <TrustBadge username={username || ''} accentColor={accentColor} />
+                            </div>
 
                             <div className="flex flex-wrap justify-center gap-2 mb-6">
                                 {tags.map((tag, idx) => (
@@ -386,6 +534,7 @@ export const PublicProfile: React.FC = () => {
                         <div className="space-y-4 mb-12">
                             {links.map((link, i) => (
                                 <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
+                                    onClick={() => { if ((link as any).id) navigator.sendBeacon(`/api/analytics/click/${(link as any).id}`); }}
                                     className="block border-2 border-black p-3 sm:p-4 bg-white transition-all transform active:scale-95 sm:active:scale-100 sm:hover:-translate-y-1 sm:hover:translate-x-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group/link hover:bg-black hover:text-white"
                                     style={{
                                         borderColor: BC,
@@ -404,6 +553,177 @@ export const PublicProfile: React.FC = () => {
                                 </a>
                             ))}
                         </div>
+
+                        {/* Store Section */}
+                        {hasStore && (storeProducts.length > 0 || storeSearch || storeTypeFilter) && (
+                            <div className="border-t-4 border-black pt-8 sm:pt-10 mb-10" style={{ borderColor: BC }}>
+                                <div className="flex items-center gap-2 mb-6 justify-center">
+                                    <div className="w-8 sm:w-12 h-1 bg-accent"></div>
+                                    <h3 className="font-mono font-black uppercase text-lg sm:text-xl" style={{ color: TC || '#000' }}>
+                                        {storeName || 'Store'}
+                                    </h3>
+                                    <div className="w-8 sm:w-12 h-1 bg-accent"></div>
+                                </div>
+
+                                <StoreDisclaimerBanner />
+
+                                {/* 3D: search + type filters. Reset offset to 0 on any change. */}
+                                <div className="flex flex-col sm:flex-row gap-2 mb-4 items-stretch">
+                                    <input
+                                        type="search"
+                                        value={storeSearch}
+                                        onChange={e => { setStoreOffset(0); setStoreSearch(e.target.value); }}
+                                        placeholder="Search products…"
+                                        className="flex-1 border-2 border-black bg-white p-2 font-mono text-xs placeholder:text-gray-400"
+                                    />
+                                    <div className="flex gap-1 flex-wrap">
+                                        {(['', 'physical', 'digital', 'service'] as const).map(t => (
+                                            <button
+                                                key={t || 'all'}
+                                                onClick={() => { setStoreOffset(0); setStoreTypeFilter(t); }}
+                                                className={`font-mono text-[10px] font-bold uppercase px-3 py-2 border-2 transition-colors ${storeTypeFilter === t ? 'bg-black text-white border-black' : 'border-gray-300 text-gray-500 hover:border-black'}`}
+                                            >
+                                                {t || 'all'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <StoreProductGrid
+                                    products={storeProducts.filter(p => p.is_active)}
+                                    accentColor={accentColor}
+                                    onBuy={(product) => {
+                                        const disclaimerAccepted = localStorage.getItem('goxmr_store_disclaimer_v1');
+                                        if (disclaimerAccepted) {
+                                            setCheckoutUnlockToken(undefined);
+                                            // #7: push a shareable URL — also makes the browser back button work
+                                            navigate(`/${username}/store/${makeProductSlug(product)}`);
+                                        } else {
+                                            setPendingBuyProduct(product);
+                                            setShowDisclaimer(true);
+                                        }
+                                    }}
+                                />
+
+                                {/* 3D: empty/loading state + pagination controls */}
+                                {storeProducts.length === 0 && !storeLoading && (
+                                    <div className="text-center py-8 font-mono text-xs text-gray-500 border-2 border-dashed border-gray-300">
+                                        No products match those filters.
+                                    </div>
+                                )}
+                                {storeTotal > storeLimit && (
+                                    <div className="flex items-center justify-between mt-4 gap-2">
+                                        <button
+                                            disabled={storeOffset === 0}
+                                            onClick={() => setStoreOffset(o => Math.max(0, o - storeLimit))}
+                                            className="font-mono text-[10px] font-bold uppercase px-3 py-2 border-2 border-black disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white"
+                                        >
+                                            ← Prev
+                                        </button>
+                                        <span className="font-mono text-[10px] text-gray-600">
+                                            {storeOffset + 1}–{Math.min(storeOffset + storeLimit, storeTotal)} of {storeTotal}
+                                        </span>
+                                        <button
+                                            disabled={storeOffset + storeLimit >= storeTotal}
+                                            onClick={() => setStoreOffset(o => o + storeLimit)}
+                                            className="font-mono text-[10px] font-bold uppercase px-3 py-2 border-2 border-black disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white"
+                                        >
+                                            Next →
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* 3C: entry point for unlisted products. The seller shares the product ID + PIN out-of-band */}
+                                <div className="mt-4 text-center">
+                                    <button
+                                        onClick={() => { setUnlockError(''); setUnlockOpen(true); }}
+                                        className="font-mono text-[11px] uppercase tracking-wider underline text-gray-500 hover:text-monero-orange"
+                                    >
+                                        Have an access code? Open an unlisted product →
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Checkout Modal */}
+                        {checkoutProduct && (
+                            <StoreCheckout
+                                product={checkoutProduct}
+                                sellerUsername={username || ''}
+                                accentColor={accentColor}
+                                unlockToken={checkoutUnlockToken}
+                                onClose={() => {
+                                    setCheckoutProduct(null);
+                                    setCheckoutUnlockToken(undefined);
+                                    // #7: if the URL contains a product slug, pop it so the back button stays predictable
+                                    if (urlProductSlug && username) navigate(`/${username}/store`, { replace: false });
+                                }}
+                            />
+                        )}
+
+                        {/* 3C: Unlock Modal */}
+                        {unlockOpen && (
+                            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUnlockOpen(false)}></div>
+                                <div className="relative w-full max-w-md bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
+                                    <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800">
+                                        <h3 className="font-mono font-black uppercase text-base tracking-tighter dark:text-white">Unlock Unlisted Product</h3>
+                                        <button onClick={() => setUnlockOpen(false)} className="font-mono font-black dark:text-white px-2">×</button>
+                                    </div>
+                                    <div className="p-5 space-y-3">
+                                        <p className="font-mono text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                                            The seller shared a product ID and a PIN with you. Wrong PINs are throttled: 5 attempts then a 1-hour lockout per IP.
+                                        </p>
+                                        <div>
+                                            <label className="font-mono text-[10px] font-bold uppercase tracking-wider dark:text-white block mb-1">Product ID</label>
+                                            <input
+                                                type="text"
+                                                value={unlockProductId}
+                                                onChange={e => setUnlockProductId(e.target.value)}
+                                                placeholder="e.g. 42"
+                                                className="w-full border-2 border-black dark:border-white bg-white dark:bg-zinc-900 p-2 font-mono text-xs dark:text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="font-mono text-[10px] font-bold uppercase tracking-wider dark:text-white block mb-1">Access PIN</label>
+                                            <input
+                                                type="password"
+                                                value={unlockPin}
+                                                onChange={e => setUnlockPin(e.target.value)}
+                                                className="w-full border-2 border-black dark:border-white bg-white dark:bg-zinc-900 p-2 font-mono text-xs dark:text-white"
+                                            />
+                                        </div>
+                                        {unlockError && <p className="text-red-500 text-xs font-mono">{unlockError}</p>}
+                                        <button
+                                            onClick={handleUnlockSubmit}
+                                            disabled={unlockLoading}
+                                            className="w-full bg-black dark:bg-white text-white dark:text-black font-mono text-xs font-black uppercase py-3 border-2 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(242,104,34,1)] hover:bg-monero-orange hover:text-white transition-colors disabled:opacity-50"
+                                        >
+                                            {unlockLoading ? 'Unlocking…' : 'Unlock & Open'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Disclaimer Modal */}
+                        {showDisclaimer && (
+                            <StoreDisclaimerModal
+                                onCancel={() => { setShowDisclaimer(false); setPendingBuyProduct(null); }}
+                                onAccept={() => {
+                                    localStorage.setItem('goxmr_store_disclaimer_v1', 'true');
+                                    setShowDisclaimer(false);
+                                    setCheckoutUnlockToken(undefined);
+                                    // #7: navigate so the URL reflects the product. Effect picks it up and opens checkout.
+                                    if (pendingBuyProduct && username) {
+                                        navigate(`/${username}/store/${makeProductSlug(pendingBuyProduct)}`);
+                                    } else {
+                                        setCheckoutProduct(pendingBuyProduct);
+                                    }
+                                    setPendingBuyProduct(null);
+                                }}
+                            />
+                        )}
 
                         <div className="border-t-4 border-black pt-8 sm:pt-10" style={{ borderColor: BC }}>
                             <div className="flex items-center gap-2 mb-8 justify-center">
@@ -451,7 +771,7 @@ export const PublicProfile: React.FC = () => {
                                                 onClick={() => setIsCakeModalOpen(true)}
                                                 className="w-full bg-[#f59e0b] text-white text-[10px] font-bold py-2 hover:bg-black transition-colors uppercase border-2 border-black flex items-center justify-center gap-2"
                                             >
-                                                Donate via CakeWallet 🍰
+                                                Donate via CakeWallet
                                             </button>
                                         )}
                                     </div>
@@ -498,6 +818,13 @@ export const PublicProfile: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Encrypted Contact Form (only if user has PGP key) */}
+                    {profile?.has_pgp && (
+                        <div className="max-w-md mx-auto mt-10 mb-6">
+                            <EncryptedContactForm username={username || ''} accentColor={accentColor} />
+                        </div>
+                    )}
 
                     <div className="text-center mt-12 mb-16 pb-8">
                         <RouterLink to="/" className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 sm:px-8 sm:py-4 font-mono font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none text-xs sm:text-sm">

@@ -1,12 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Terminal, Save, Loader2, Check } from 'lucide-react';
+interface NotificationCounts {
+    store_orders: number;
+    unread_messages: number;
+    deadman_active: number;
+    pgp_dms_unread?: number;
+}
+
+const NOTIFICATION_MAP: Record<string, keyof NotificationCounts> = {
+    store: 'store_orders',
+    messages: 'unread_messages',
+    'pgp-dms': 'pgp_dms_unread',
+};
+
 interface DashboardNavProps {
     activeSection: string;
     isDeploying: boolean;
     onDeploy: () => void;
     isSuccess: boolean;
+    notifications?: NotificationCounts;
 }
 const NAV_ITEMS = [
+    { id: 'handles', label: '00_YOUR_HANDLES', status: 'LIVE' },
     { id: 'identity', label: '01_IDENTITY', status: 'OK' },
     { id: 'profile-links', label: '02_PROFILE_LINKS', status: 'OK' },
     { id: 'treasury', label: '03_TREASURY', status: 'OK' },
@@ -14,8 +29,11 @@ const NAV_ITEMS = [
     { id: 'qr-foundry', label: '05_QR_FOUNDRY', status: 'ACTIVE' },
     { id: 'design', label: '06_DESIGN_STUDIO', status: 'READY' },
     { id: 'settings', label: '07_SECURITY_&_OPS', status: 'READY' },
+    { id: 'store', label: '08_STORE_OPS', status: 'NEW' },
+    { id: 'messages', label: '09_ENCRYPTED_INBOX', status: 'NEW' },
+    { id: 'pgp-dms', label: '10_PGP_DIRECT_MSGS', status: 'NEW' },
 ];
-export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDeploying, onDeploy, isSuccess: deployed }) => {
+export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDeploying, onDeploy, isSuccess: deployed, notifications }) => {
     const scrollToSection = (id: string) => {
         const element = document.getElementById(id);
         if (element) {
@@ -38,11 +56,13 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
                 <div className="space-y-1">
                     {NAV_ITEMS.map((item) => {
                         const isActive = activeSection === item.id;
+                        const notifKey = NOTIFICATION_MAP[item.id];
+                        const badgeCount = notifKey && notifications ? notifications[notifKey] : 0;
                         return (
                             <button
                                 key={item.id}
                                 onClick={() => scrollToSection(item.id)}
-                                className={`w-full text-left font-mono text-xs py-2 px-2 flex justify-between items-center group transition-colors ${isActive
+                                className={`w-full text-left font-mono text-xs py-2 px-2 flex justify-between items-center group transition-colors relative ${isActive
                                     ? 'bg-black dark:bg-white text-white dark:text-black shadow-[2px_2px_0px_0px_rgba(242,104,34,1)]'
                                     : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'
                                     }`}
@@ -51,8 +71,13 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
                                     {isActive ? <span>{'>'}</span> : <span className="opacity-0 group-hover:opacity-50">{'>'}</span>}
                                     {item.label}
                                 </span>
-                                <span className={`text-[10px] ${isActive ? 'text-green-400' : 'opacity-0'}`}>
-                                    [{isActive ? 'EXEC' : item.status}]
+                                <span className="flex items-center gap-1">
+                                    {badgeCount > 0 && (
+                                        <span className="bg-monero-orange text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{badgeCount}</span>
+                                    )}
+                                    <span className={`text-[10px] ${isActive ? 'text-green-400' : 'opacity-0'}`}>
+                                        [{isActive ? 'EXEC' : item.status}]
+                                    </span>
                                 </span>
                             </button>
                         );

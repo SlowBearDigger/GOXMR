@@ -123,6 +123,8 @@ app.get('/trap', tarpitHandler);
 
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    strictTransportSecurity: { maxAge: 63072000, includeSubDomains: true, preload: true },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     contentSecurityPolicy: {
         directives: {
             "default-src": ["'self'"],
@@ -132,16 +134,31 @@ app.use(helmet({
                 ...(IS_DEV ? ["'unsafe-inline'"] : [(req, res) => `'nonce-${res.locals.cspNonce}'`]),
                 "blob:"
             ],
+            "script-src-attr": ["'none'"],
             "worker-src": ["'self'", "blob:"],
             "child-src": ["'self'", "blob:"],
+            // tailwind ships utility classes inline at build, no runtime <style> mutation
             "style-src": ["'self'", "'unsafe-inline'"],
             "font-src": ["'self'", "data:"],
-            "img-src": ["'self'", "data:", "blob:", "https://goxmr.click", "https://upload.wikimedia.org", "https://assets.coingecko.com", "https://www.getmonero.org", "https://gift.runa.io", "https://d30s7yzk2az89n.cloudfront.net", "https://cdn.reloadly.com"],
-            "connect-src": ["'self'", "blob:", "https://api.coingecko.com", "https://node.sethforprivacy.com:443", "https://node.sethforprivacy.com"],
+            "img-src": ["'self'", "data:", "blob:", "https://*.goxmr.click", "https://assets.coingecko.com", "https://www.getmonero.org"],
+            "media-src": ["'self'", "blob:"],
+            "connect-src": [
+                "'self'",
+                "blob:",
+                "https://*.goxmr.click",
+                "https://api.coingecko.com",
+                "https://dns.google",
+                "https://cloudflare-dns.com",
+                "https://xmr-node.cakewallet.com:18081",
+                "https://node.monerodevs.org:18089",
+                "https://nodes.hashvault.pro:18081",
+            ],
             "frame-ancestors": ["'none'"],
+            "frame-src": ["'none'"],
             "object-src": ["'none'"],
             "base-uri": ["'self'"],
-            "form-action": ["'self'"]
+            "form-action": ["'self'"],
+            "upgrade-insecure-requests": [],
         }
     }
 }));
@@ -2777,6 +2794,29 @@ setInterval(async () => {
         console.error('[DEADMAN] Background check error:', err.message);
     }
 }, 15 * 60 * 1000); // Every 15 minutes
+
+// Last-resort error handler. Any uncaught throw in a route lands here.
+// Emits a correlation ID the user can quote without leaking the stack.
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const id = logError('UNCAUGHT', err, {
+        method: req.method, path: req.path, ip: redactIp(req),
+        userId: req.user?.userId,
+    });
+    // CORS rejections from the cors() middleware throw a generic Error here.
+    // Surface 403 for those, generic 500 for everything else.
+    const status = /CORS/i.test(err?.message || '') ? 403 : 500;
+    res.status(status).json({ error: status === 403 ? 'Access Denied' : 'Server error', id });
+});
+
+process.on('unhandledRejection', (reason) => {
+    logError('UNHANDLED_REJECTION', reason instanceof Error ? reason : new Error(String(reason)));
+});
+process.on('uncaughtException', (err) => {
+    logError('UNCAUGHT_EXCEPTION', err);
+});
+
+app.disable('x-powered-by');
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`GOXMR Server running on port ${PORT} (0.0.0.0)`);

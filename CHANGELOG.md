@@ -1,5 +1,23 @@
 # GOXMR Changelog
 
+## v2.2.0 — 2026-05-29
+
+User-facing gallery feature for public profiles.
+
+### Gallery
+- New `gallery_images` table with foreign key to users (CASCADE on delete) + composite index on (user_id, sort_order)
+- 4 endpoints: `GET /api/me/gallery` (own), `GET /api/user/:name/gallery` (public, 60s cache), `POST /api/me/gallery` (multipart upload), `PUT /api/me/gallery/:id` (caption + order), `DELETE /api/me/gallery/:id` (also unlinks file)
+- Per-user quota (default 12 images, configurable via `MAX_GALLERY_PER_USER` env var)
+- Sharp pipeline reused: max 1600x1600, webp quality 82; GIFs pass through up to 5MB to preserve animation
+- Dashboard section `04_GALLERY` with add/delete/caption inline editing and drag-to-reorder (persisted in parallel)
+- PublicProfile renders `PublicGallery` masonry-style grid below bio with hover captions and a click-to-zoom lightbox (Esc to close, arrow keys to navigate)
+- Optimistic UI for delete and reorder; file cleanup on delete is best-effort
+
+### Infrastructure
+- OLS `Server:` header rewritten to "GOXMR", `X-Powered-By` stripped via vhost `extraHeaders` block
+
+---
+
 ## v2.1.1 — 2026-05-29
 
 Hardening and branding round.

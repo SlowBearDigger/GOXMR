@@ -11,6 +11,7 @@ import { AddProductModal } from './AddProductModal';
 import { MessageInbox } from './MessageInbox';
 import { PgpInbox } from './PgpInbox';
 import { MyHandlesCard } from './MyHandlesCard';
+import { GalleryEditor } from './GalleryEditor';
 import type { Link, Wallet } from '../types.ts';
 const INITIAL_LINKS: Link[] = [];
 const INITIAL_WALLETS: Wallet[] = [];
@@ -849,6 +850,12 @@ export const Dashboard: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </section>
+
+                    <section id="gallery" className="scroll-mt-32">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] p-4">
+                            <GalleryEditor />
                         </div>
                     </section>
 

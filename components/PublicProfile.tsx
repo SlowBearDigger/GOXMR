@@ -7,6 +7,7 @@ import { StoreProductGrid } from './StoreProductGrid';
 import { StoreCheckout } from './StoreCheckout';
 import { StoreDisclaimerBanner, StoreDisclaimerModal } from './StoreDisclaimer';
 import { EncryptedContactForm } from './EncryptedContactForm';
+import { PublicGallery } from './PublicGallery';
 import QRCodeStyling from 'qr-code-styling';
 import { productSlug as makeProductSlug, parseProductSlug } from '../utils/productSlug';
 
@@ -818,6 +819,9 @@ export const PublicProfile: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Public gallery (only renders if the user has at least one image) */}
+                    <PublicGallery username={username || ''} />
 
                     {/* Encrypted Contact Form (only if user has PGP key) */}
                     {profile?.has_pgp && (

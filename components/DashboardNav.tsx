@@ -25,13 +25,14 @@ const NAV_ITEMS = [
     { id: 'identity', label: '01_IDENTITY', status: 'OK' },
     { id: 'profile-links', label: '02_PROFILE_LINKS', status: 'OK' },
     { id: 'treasury', label: '03_TREASURY', status: 'OK' },
-    { id: 'assets', label: '04_CRYPTO_ASSETS', status: 'NEW' },
-    { id: 'qr-foundry', label: '05_QR_FOUNDRY', status: 'ACTIVE' },
-    { id: 'design', label: '06_DESIGN_STUDIO', status: 'READY' },
-    { id: 'settings', label: '07_SECURITY_&_OPS', status: 'READY' },
-    { id: 'store', label: '08_STORE_OPS', status: 'NEW' },
-    { id: 'messages', label: '09_ENCRYPTED_INBOX', status: 'NEW' },
-    { id: 'pgp-dms', label: '10_PGP_DIRECT_MSGS', status: 'NEW' },
+    { id: 'gallery', label: '04_GALLERY', status: 'NEW' },
+    { id: 'assets', label: '05_CRYPTO_ASSETS', status: 'NEW' },
+    { id: 'qr-foundry', label: '06_QR_FOUNDRY', status: 'ACTIVE' },
+    { id: 'design', label: '07_DESIGN_STUDIO', status: 'READY' },
+    { id: 'settings', label: '08_SECURITY_&_OPS', status: 'READY' },
+    { id: 'store', label: '09_STORE_OPS', status: 'NEW' },
+    { id: 'messages', label: '10_ENCRYPTED_INBOX', status: 'NEW' },
+    { id: 'pgp-dms', label: '11_PGP_DIRECT_MSGS', status: 'NEW' },
 ];
 export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDeploying, onDeploy, isSuccess: deployed, notifications }) => {
     const scrollToSection = (id: string) => {

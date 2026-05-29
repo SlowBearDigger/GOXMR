@@ -435,6 +435,19 @@ db.serialize(() => {
             console.error('Migration Error (openalias_wallet_id):', err);
         }
     });
+    // gallery_images: per-user public image showcase, rendered on PublicProfile
+    db.run(`CREATE TABLE IF NOT EXISTS gallery_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        file_url TEXT NOT NULL,
+        caption TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`, (err) => {
+        if (err) console.error('Migration Error (gallery_images):', err);
+    });
+    db.run('CREATE INDEX IF NOT EXISTS idx_gallery_user ON gallery_images(user_id, sort_order)');
 });
 const dbGet = (query, params) => {
     return new Promise((resolve, reject) => {
@@ -953,6 +966,148 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
         res.status(500).json({ error: 'Upload or optimization failed' });
     }
 });
+// ============================================
+// GALLERY: per-user public image showcase
+// ============================================
+const GALLERY_MAX_PER_USER = parseInt(process.env.MAX_GALLERY_PER_USER || '12', 10);
+const GALLERY_MAX_DIM = parseInt(process.env.MAX_GALLERY_DIM || '1600', 10);
+const GALLERY_WEBP_QUALITY = 82;
+
+// GET own gallery (authed, includes captions and order)
+app.get('/api/me/gallery', authenticateToken, async (req, res) => {
+    try {
+        const rows = await dbAll(
+            'SELECT id, file_url, caption, sort_order, created_at FROM gallery_images WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
+            [req.user.userId]
+        );
+        res.json({ images: rows, max: GALLERY_MAX_PER_USER });
+    } catch (err) {
+        const id = logError('GALLERY_LIST', err, { userId: req.user?.userId });
+        res.status(500).json({ error: 'Server error', id });
+    }
+});
+
+// GET public gallery by username
+app.get('/api/user/:username/gallery', async (req, res) => {
+    try {
+        const user = await dbGet('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [req.params.username]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        const rows = await dbAll(
+            'SELECT id, file_url, caption, sort_order FROM gallery_images WHERE user_id = ? ORDER BY sort_order ASC, id ASC',
+            [user.id]
+        );
+        res.set('Cache-Control', 'public, max-age=60');
+        res.json({ images: rows });
+    } catch (err) {
+        const id = logError('GALLERY_PUBLIC', err);
+        res.status(500).json({ error: 'Server error', id });
+    }
+});
+
+// POST upload one gallery image (multipart)
+app.post('/api/me/gallery', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        // enforce quota BEFORE consuming the file slot
+        const count = await dbGet('SELECT COUNT(*) as n FROM gallery_images WHERE user_id = ?', [req.user.userId]);
+        if ((count?.n || 0) >= GALLERY_MAX_PER_USER) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(409).json({ error: `Gallery full (${GALLERY_MAX_PER_USER} images max). Delete one first.` });
+        }
+        const isGif = path.extname(req.file.originalname).toLowerCase() === '.gif';
+        let fileUrl;
+        if (isGif) {
+            // preserve animation, just move
+            const GIF_LIMIT = 5 * 1024 * 1024;
+            if (req.file.size > GIF_LIMIT) {
+                fs.unlink(req.file.path, () => {});
+                return res.status(400).json({ error: 'GIF too large (5MB max)' });
+            }
+            const filename = `${req.file.filename.split('.')[0]}.gif`;
+            fs.renameSync(req.file.path, path.join(uploadDir, filename));
+            fileUrl = `/uploads/${filename}`;
+        } else {
+            const baseName = `${req.file.filename.split('.')[0]}-gal.webp`;
+            const outputBuffer = await sharp(req.file.path)
+                .resize(GALLERY_MAX_DIM, GALLERY_MAX_DIM, { fit: 'inside', withoutEnlargement: true })
+                .webp({ quality: GALLERY_WEBP_QUALITY })
+                .toBuffer();
+            await fs.promises.writeFile(path.join(uploadDir, baseName), outputBuffer);
+            fs.unlink(req.file.path, () => {});
+            fileUrl = `/uploads/${baseName}`;
+        }
+        const caption = typeof req.body.caption === 'string' ? req.body.caption.slice(0, 280) : null;
+        // next sort_order is MAX+1 so new arrivals show at the end
+        const maxRow = await dbGet('SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM gallery_images WHERE user_id = ?', [req.user.userId]);
+        const result = await dbRun(
+            'INSERT INTO gallery_images (user_id, file_url, caption, sort_order) VALUES (?, ?, ?, ?)',
+            [req.user.userId, fileUrl, caption, maxRow.next]
+        );
+        const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+        if (user) profileCache.del(`user:${user.username}`);
+        res.json({ id: result.lastID, file_url: fileUrl, caption, sort_order: maxRow.next });
+    } catch (err) {
+        if (req.file) fs.unlink(req.file.path, () => {});
+        const id = logError('GALLERY_UPLOAD', err, { userId: req.user?.userId });
+        res.status(500).json({ error: 'Upload failed', id });
+    }
+});
+
+// PUT update caption or order
+app.put('/api/me/gallery/:id', authenticateToken, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(400).json({ error: 'Bad id' });
+        const owned = await dbGet('SELECT id FROM gallery_images WHERE id = ? AND user_id = ?', [id, req.user.userId]);
+        if (!owned) return res.status(404).json({ error: 'Not found' });
+        const updates = [];
+        const params = [];
+        if (typeof req.body.caption === 'string') {
+            updates.push('caption = ?');
+            params.push(req.body.caption.slice(0, 280));
+        } else if (req.body.caption === null) {
+            updates.push('caption = NULL');
+        }
+        if (typeof req.body.sort_order === 'number') {
+            updates.push('sort_order = ?');
+            params.push(req.body.sort_order);
+        }
+        if (!updates.length) return res.json({ ok: true });
+        params.push(id);
+        await dbRun(`UPDATE gallery_images SET ${updates.join(', ')} WHERE id = ?`, params);
+        const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+        if (user) profileCache.del(`user:${user.username}`);
+        res.json({ ok: true });
+    } catch (err) {
+        const id = logError('GALLERY_UPDATE', err, { userId: req.user?.userId });
+        res.status(500).json({ error: 'Server error', id });
+    }
+});
+
+// DELETE one image (also unlinks the file)
+app.delete('/api/me/gallery/:id', authenticateToken, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(400).json({ error: 'Bad id' });
+        const row = await dbGet('SELECT file_url FROM gallery_images WHERE id = ? AND user_id = ?', [id, req.user.userId]);
+        if (!row) return res.status(404).json({ error: 'Not found' });
+        await dbRun('DELETE FROM gallery_images WHERE id = ? AND user_id = ?', [id, req.user.userId]);
+        // best-effort file removal
+        try {
+            const filename = row.file_url.replace(/^\/uploads\//, '');
+            if (filename && !filename.includes('..')) {
+                fs.unlink(path.join(uploadDir, filename), () => {});
+            }
+        } catch {}
+        const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
+        if (user) profileCache.del(`user:${user.username}`);
+        res.json({ ok: true });
+    } catch (err) {
+        const id = logError('GALLERY_DELETE', err, { userId: req.user?.userId });
+        res.status(500).json({ error: 'Server error', id });
+    }
+});
+
 app.delete('/api/me/upload/audio', authenticateToken, async (req, res) => {
     try {
         await dbRun('UPDATE users SET music_url = NULL WHERE id = ?', [req.user.userId]);

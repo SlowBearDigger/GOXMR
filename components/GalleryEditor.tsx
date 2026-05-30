@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Image as ImageIcon, Plus, Trash2, Loader2, GripVertical, X, Eye, EyeOff, Link as LinkIcon, ChevronDown } from 'lucide-react';
 import { showToast } from './Toast';
 
@@ -278,25 +279,69 @@ export const GalleryLightbox: React.FC<LightboxProps> = ({ images, index, onClos
             if (e.key === 'ArrowLeft') onIndex((index - 1 + images.length) % images.length);
         };
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        // Lock body scroll while lightbox is open so the page behind doesn't slip
+        // and the modal stays anchored in the viewport.
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prevOverflow;
+        };
     }, [index, images.length, onClose, onIndex]);
 
     if (!images[index]) return null;
     const img = images[index];
-    return (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose} role="dialog" aria-modal="true">
-            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 p-2 bg-white text-black hover:bg-monero-orange hover:text-white border-2 border-white" aria-label="Close">
+
+    // Render through a portal directly under <body> so the fixed positioning is
+    // calculated against the viewport, not against any transformed ancestor
+    // (the public profile hero has transforms that break position: fixed otherwise).
+    const overlay = (
+        <div
+            className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 overflow-hidden"
+            onClick={onClose}
+            role="dialog"
+            aria-modal="true"
+        >
+            <button
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                className="absolute top-4 right-4 p-2 bg-white text-black hover:bg-monero-orange hover:text-white border-2 border-white z-10"
+                aria-label="Close"
+            >
                 <X size={18} />
             </button>
-            <div className="max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
-                <img src={img.file_url} alt={img.alt_text || img.caption || ''} className="w-full max-h-[80vh] object-contain border-4 border-white" />
-                {img.caption && (<p className="text-white font-mono text-xs mt-3 text-center">{img.caption}</p>)}
-                <div className="flex justify-center gap-2 mt-3">
-                    <button onClick={() => onIndex((index - 1 + images.length) % images.length)} className="font-mono text-[10px] uppercase tracking-widest px-3 py-2 bg-white text-black hover:bg-monero-orange hover:text-white">← prev</button>
-                    <span className="font-mono text-[10px] uppercase text-white/60 self-center">{index + 1} / {images.length}{typeof img.views === 'number' ? ` · ${img.views} views` : ''}</span>
-                    <button onClick={() => onIndex((index + 1) % images.length)} className="font-mono text-[10px] uppercase tracking-widest px-3 py-2 bg-white text-black hover:bg-monero-orange hover:text-white">next →</button>
+            <div className="max-w-5xl w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+                <div className="w-full flex justify-center">
+                    <img
+                        src={img.file_url}
+                        alt={img.alt_text || img.caption || ''}
+                        className="max-w-full max-h-[75vh] object-contain border-4 border-white"
+                    />
+                </div>
+                {img.caption && (
+                    <p className="text-white font-mono text-xs mt-3 text-center max-w-2xl px-2">{img.caption}</p>
+                )}
+                <div className="flex justify-center gap-2 mt-3 flex-wrap">
+                    <button
+                        onClick={() => onIndex((index - 1 + images.length) % images.length)}
+                        className="font-mono text-[10px] uppercase tracking-widest px-3 py-2 bg-white text-black hover:bg-monero-orange hover:text-white"
+                    >
+                        ← prev
+                    </button>
+                    <span className="font-mono text-[10px] uppercase text-white/60 self-center">
+                        {index + 1} / {images.length}{typeof img.views === 'number' ? ` · ${img.views} views` : ''}
+                    </span>
+                    <button
+                        onClick={() => onIndex((index + 1) % images.length)}
+                        className="font-mono text-[10px] uppercase tracking-widest px-3 py-2 bg-white text-black hover:bg-monero-orange hover:text-white"
+                    >
+                        next →
+                    </button>
                 </div>
             </div>
         </div>
     );
+
+    return typeof document !== 'undefined'
+        ? createPortal(overlay, document.body)
+        : overlay;
 };

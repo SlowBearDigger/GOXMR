@@ -1,5 +1,21 @@
 # GOXMR Changelog
 
+## v2.4.2 — 2026-05-29
+
+Modal positioning fix.
+
+### Public profile
+- Gallery lightbox, ShareModal and TipXmrModal now render through React Portal
+  directly under document.body. The hero card in PublicProfile uses CSS
+  transforms which broke `position: fixed` for any descendant — the portal
+  escapes the transformed ancestor so modals stay anchored to the viewport
+- Body scroll locked while a modal is open so the page behind cannot slip out
+  from under it
+- Lightbox image cap reduced from 80vh to 75vh so the caption and prev/next
+  controls always fit on screen without scrolling on shorter viewports
+
+---
+
 ## v2.4.1 — 2026-05-29
 
 Dashboard scroll-flow fix.

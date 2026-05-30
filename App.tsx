@@ -183,6 +183,23 @@ const App: React.FC = () => {
 
 
 
+    // Subdomain detection: a request to https://<user>.goxmr.click should land
+    // on the user's profile, not the marketing home. The server middleware
+    // rewrites the response, but the SPA reads window.location.pathname which
+    // still shows "/". We derive the username from the hostname here and use
+    // it to override the catch-all `/:username` route.
+    const RESERVED_SUBS = new Set([
+        'www', 'api', 'mail', 'ns1', 'ns2', 'cpanel', 'webmail', 'webdisk',
+        'autoconfig', 'autodiscover', 'cpcalendars', 'cpcontacts', 'whm', 'ftp',
+    ]);
+    const subdomainUser = React.useMemo(() => {
+        if (typeof window === 'undefined') return null;
+        const host = window.location.hostname.toLowerCase();
+        const m = host.match(/^([a-z0-9_-]{1,30})\.goxmr\.click$/);
+        if (!m || RESERVED_SUBS.has(m[1])) return null;
+        return m[1];
+    }, []);
+
     return (
         <div className={theme === 'dark' ? 'dark' : ''}>
             <Routes>
@@ -202,7 +219,15 @@ const App: React.FC = () => {
                         />
                     </AppLayout>
                 }>
-                    <Route path="/" element={<LandingPage onOpenRegister={handleOpenRegister} />} />
+                    <Route path="/" element={
+                        subdomainUser ? (
+                            <div className="light font-sans selection:bg-monero-orange selection:text-white relative min-h-screen">
+                                <PublicProfile usernameOverride={subdomainUser} />
+                            </div>
+                        ) : (
+                            <LandingPage onOpenRegister={handleOpenRegister} />
+                        )
+                    } />
                     <Route path="/dashboard" element={(() => {
                         // Public sections (learn/guide/tools/contribute/swap/shop/activity) don't require auth.
                         // Only the bare "home" section maps to <Dashboard /> which is auth-only.
@@ -232,6 +257,24 @@ const App: React.FC = () => {
                 <Route path="/orders" element={<OrdersList />} />
                 {/* #4.4: opt-in marketplace discovery */}
                 <Route path="/market" element={<MarketPage />} />
+
+                {/* Subdomain-scoped store routes: on https://<user>.goxmr.click,
+                    /store and /store/<slug> render the same PublicProfile as the
+                    apex `/:username/store` would, with the subdomain user injected. */}
+                {subdomainUser && (
+                    <>
+                        <Route path="/store" element={
+                            <div className="light font-sans selection:bg-monero-orange selection:text-white relative min-h-screen">
+                                <PublicProfile usernameOverride={subdomainUser} />
+                            </div>
+                        } />
+                        <Route path="/store/:productSlug" element={
+                            <div className="light font-sans selection:bg-monero-orange selection:text-white relative min-h-screen">
+                                <PublicProfile usernameOverride={subdomainUser} />
+                            </div>
+                        } />
+                    </>
+                )}
 
                 {/* #7: per-seller store routes — shareable storefront and individual product URLs */}
                 <Route path="/:username/store" element={

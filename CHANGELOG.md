@@ -1,5 +1,20 @@
 # GOXMR Changelog
 
+## v2.4.4 — 2026-05-29
+
+Subdomain routing on the client + mobile Deploy/Preview surface.
+
+### Public profile
+- Hitting `https://<user>.goxmr.click/` now lands on that user's PublicProfile instead of the marketing home. The server middleware was rewriting the response but the React Router on the client read `window.location.pathname === '/'` and fell through to `LandingPage`
+- New client-side subdomain detection in App.tsx derives the user from `window.location.hostname`, falls through for reserved subdomains (www, api, mail, ns1, ns2, etc.), and passes it as a `usernameOverride` prop to PublicProfile
+- Subdomain-scoped store routes added: `/store` and `/store/<slug>` on a user subdomain render the same PublicProfile as the apex `/:username/store` would
+
+### Dashboard
+- Preview button now also lives in the header next to Deploy so it's reachable on tablet and mobile, not just desktop sidebar
+- New floating mobile-only bottom action bar on `< lg:` viewports with Deploy + Preview side by side. Sticky so the user can save personalization changes from any section without scrolling back to the top
+
+---
+
 ## v2.4.3 — 2026-05-29
 
 Dashboard sidebar active-section tracker rewritten.

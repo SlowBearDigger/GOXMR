@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music, Lock, Wrench, Clock } from 'lucide-react';
+import { Camera, Plus, Trash2, Twitter, Globe, Github, Youtube, Smartphone, DollarSign, Wallet as WalletIcon, Check, Loader2, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Zap, Shield, Cpu, ChevronDown, Music, Lock, Wrench, Clock, ExternalLink, Save } from 'lucide-react';
 import { QrGenerator } from './QrGenerator';
 import { Settings } from './Settings';
 import { DashboardNav } from './DashboardNav';
@@ -606,9 +606,45 @@ export const Dashboard: React.FC = () => {
                             </>
                         )}
                     </button>
-                    <div className="font-mono text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 px-2 py-1 border border-green-800 dark:border-green-600 font-bold">
+                    {username && (
+                        <a
+                            href={`https://${username.toLowerCase()}.goxmr.click`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs px-3 py-2 border-2 border-black dark:border-white font-bold uppercase tracking-wider hover:bg-monero-orange hover:text-white hover:border-monero-orange transition-colors inline-flex items-center gap-1.5 bg-white dark:bg-zinc-900 dark:text-white"
+                            title="Open your live profile"
+                        >
+                            Preview <ExternalLink size={12} />
+                        </a>
+                    )}
+                    <div className="hidden sm:flex font-mono text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 px-2 py-1 border border-green-800 dark:border-green-600 font-bold">
                         ● SYSTEMS ONLINE
                     </div>
+                </div>
+            </div>
+
+            {/* Mobile floating Deploy bar — sticky at bottom so the action is one tap
+                away even when the user is deep in a section. Hidden on lg+ because the
+                sidebar already exposes the same button there. */}
+            <div className="lg:hidden fixed bottom-3 inset-x-3 z-30 pointer-events-none">
+                <div className="pointer-events-auto flex gap-2 bg-white dark:bg-zinc-950 border-2 border-black dark:border-white p-2 shadow-[4px_4px_0_0_rgba(0,0,0,1)] dark:shadow-[4px_4px_0_0_rgba(255,255,255,1)]">
+                    <button
+                        onClick={handleDeploy}
+                        disabled={isDeploying}
+                        className={`flex-1 font-mono text-[11px] font-black uppercase tracking-wider px-3 py-3 border-2 border-black dark:border-white transition-colors inline-flex items-center justify-center gap-2 ${isDeploying ? 'bg-gray-100 text-gray-400' : isDeploySuccess ? 'bg-green-500 text-white border-green-700' : 'bg-black dark:bg-white text-white dark:text-black'}`}
+                    >
+                        {isDeploying ? <><Loader2 size={12} className="animate-spin" /> Deploying</> : isDeploySuccess ? <><Check size={12} /> Synced</> : <><Save size={12} /> Deploy</>}
+                    </button>
+                    {username && (
+                        <a
+                            href={`https://${username.toLowerCase()}.goxmr.click`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-[11px] font-black uppercase tracking-wider px-3 py-3 border-2 border-black dark:border-white hover:bg-monero-orange hover:text-white hover:border-monero-orange transition-colors inline-flex items-center justify-center gap-1.5 dark:text-white"
+                        >
+                            <ExternalLink size={12} /> Preview
+                        </a>
+                    )}
                 </div>
             </div>
             <div className="flex flex-col lg:flex-row gap-8">

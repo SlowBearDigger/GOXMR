@@ -12,6 +12,7 @@ import { MessageInbox } from './MessageInbox';
 import { PgpInbox } from './PgpInbox';
 import { MyHandlesCard } from './MyHandlesCard';
 import { GalleryEditor } from './GalleryEditor';
+import { DashboardOverview } from './DashboardOverview';
 import type { Link, Wallet } from '../types.ts';
 const INITIAL_LINKS: Link[] = [];
 const INITIAL_WALLETS: Wallet[] = [];
@@ -115,6 +116,7 @@ export const Dashboard: React.FC = () => {
     const [handleConfig, setHandleConfig] = useState<{ enabled_currencies: string[] }>({ enabled_currencies: ['XMR'] });
     const [musicUrl, setMusicUrl] = useState<string | null>(null);
     const [isPremium, setIsPremium] = useState(false);
+    const [profileViews, setProfileViews] = useState(0);
     const [premiumSubaddress, setPremiumSubaddress] = useState('');
     const [premiumActivatedAt, setPremiumActivatedAt] = useState<string | null>(null);
     const [userSignals, setUserSignals] = useState<any[]>([]);
@@ -242,6 +244,7 @@ export const Dashboard: React.FC = () => {
                 setHasRecovery(!!data.hasRecovery);
                 setHasPgp(!!data.hasPgp);
                 setIsPremium(!!data.isPremium);
+                setProfileViews(Number(data.profile_views) || 0);
                 if (data.premiumActivatedAt) setPremiumActivatedAt(data.premiumActivatedAt);
                 if (data.pgp_public_key) setPgpKey(data.pgp_public_key);
                 if (data.handle_config) setHandleConfig(data.handle_config);
@@ -566,16 +569,27 @@ export const Dashboard: React.FC = () => {
                         onDeploy={handleDeploy}
                         isSuccess={isDeploySuccess}
                         notifications={navNotifications}
+                        username={username}
                     />
                 </div>
                 { }
                 <div className="lg:w-3/4 flex flex-col gap-12 transition-colors duration-300">
-                    {/* Section 00 — quick-copy of the three handles every user gets.
-                        Lives ABOVE identity so it's the first thing visible after login. */}
-                    <MyHandlesCard
-                        username={username}
-                        hasXmrWallet={wallets.some(w => w.currency === 'XMR' && w.address)}
-                    />
+                    {/* Overview — metric cards + quick-jump shortcuts. First thing after login. */}
+                    <section id="overview" className="scroll-mt-32">
+                        <DashboardOverview
+                            username={username}
+                            profileViews={profileViews}
+                            notifications={navNotifications as any}
+                        />
+                    </section>
+
+                    {/* Section 00 — quick-copy of the three handles every user gets. */}
+                    <section id="handles" className="scroll-mt-32">
+                        <MyHandlesCard
+                            username={username}
+                            hasXmrWallet={wallets.some(w => w.currency === 'XMR' && w.address)}
+                        />
+                    </section>
                     { }
                     <section id="identity" className="scroll-mt-32">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">

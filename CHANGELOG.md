@@ -1,5 +1,23 @@
 # GOXMR Changelog
 
+## v2.4.0 — 2026-05-29
+
+Dashboard rework phase 1 + responsive width rhythm on public profile.
+
+### Dashboard
+- New Overview section at the top of the dashboard with 4 metric cards (profile views, pending orders, unread contact-form messages, unread PGP DMs) and a 6-tile quick-jump grid linking to the main work areas (Identity, Links, Gallery, Wallets, Store, PGP DMs)
+- Sidebar nav reorganised into 5 named groups with visual headers: Home, Brand, Commerce, Comms, Account. Each group renders its own dividers so the long flat list is now scannable
+- New Preview button in the sidebar opens the user's live profile (`https://<user>.goxmr.click`) in a new tab — paired with the existing Deploy button
+- Deploy button compacted, no more standalone memory-usage bar
+
+### Public profile width rhythm
+- Outer hero container is now `max-w-3xl` on mobile/tablet and `max-w-5xl` from `xl:` up. Bio stays narrow but gallery and store get room to breathe on desktop
+- PublicGallery grid scales 2 → 3 → 4 → 5 columns across `sm: lg: xl:` breakpoints
+- StoreProductGrid scales 2 → 3 → 4 columns across `sm: lg: xl:` breakpoints
+- Intentionally keeps the intimate centered hero — content sections breathe, identity stays personal
+
+---
+
 ## v2.3.0 — 2026-05-29
 
 Public profile redesign (option A: editorial stack).

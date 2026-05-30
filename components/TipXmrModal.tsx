@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Copy, Check, X, Coins } from 'lucide-react';
 import QRCodeStyling from 'qr-code-styling';
 import { showToast } from './Toast';
@@ -18,7 +19,12 @@ export const TipXmrModal: React.FC<TipXmrModalProps> = ({ username, address, acc
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prevOverflow;
+        };
     }, [onClose]);
 
     useEffect(() => {
@@ -44,8 +50,8 @@ export const TipXmrModal: React.FC<TipXmrModalProps> = ({ username, address, acc
 
     const openalias = `${username.toLowerCase()}@goxmr.click`;
 
-    return (
-        <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={onClose} role="dialog" aria-modal="true">
+    const overlay = (
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150 overflow-y-auto" onClick={onClose} role="dialog" aria-modal="true">
             <div className="w-full max-w-md bg-white dark:bg-zinc-950 border-2 border-black dark:border-white" style={{ boxShadow: `10px 10px 0 0 ${AC}` }} onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4">
                     <h3 className="font-mono font-black uppercase text-sm dark:text-white inline-flex items-center gap-2">
@@ -85,4 +91,5 @@ export const TipXmrModal: React.FC<TipXmrModalProps> = ({ username, address, acc
             </div>
         </div>
     );
+    return typeof document !== 'undefined' ? createPortal(overlay, document.body) : overlay;
 };

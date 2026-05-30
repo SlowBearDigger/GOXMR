@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Copy, Check, X, Globe, Link as LinkIcon, AtSign, Download } from 'lucide-react';
 import QRCodeStyling from 'qr-code-styling';
 import { showToast } from './Toast';
@@ -29,7 +30,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({ username, onClose }) => 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prevOverflow;
+        };
     }, [onClose]);
 
     useEffect(() => {
@@ -58,8 +64,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ username, onClose }) => 
         qrInstance.current?.download({ name: `goxmr-${username.toLowerCase()}-${selectedId}`, extension: 'png' });
     };
 
-    return (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={onClose} role="dialog" aria-modal="true">
+    const overlay = (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150 overflow-y-auto" onClick={onClose} role="dialog" aria-modal="true">
             <div className="w-full max-w-xl bg-white dark:bg-zinc-950 border-2 border-black dark:border-white shadow-[10px_10px_0_0_rgba(242,104,34,1)]" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4">
                     <h3 className="font-mono font-black uppercase text-sm dark:text-white">Share @{username}</h3>
@@ -105,4 +111,5 @@ export const ShareModal: React.FC<ShareModalProps> = ({ username, onClose }) => 
             </div>
         </div>
     );
+    return typeof document !== 'undefined' ? createPortal(overlay, document.body) : overlay;
 };

@@ -71,9 +71,14 @@ const IconRenderer = ({ name, className }: { name: string, className?: string })
     return <Icon className={className} />;
 };
 
-export const PublicProfile: React.FC = () => {
+interface PublicProfileProps { usernameOverride?: string }
+export const PublicProfile: React.FC<PublicProfileProps> = ({ usernameOverride }) => {
     // #7: support /:username, /:username/store, /:username/store/:productSlug
-    const { username, productSlug: urlProductSlug } = useParams<{ username: string; productSlug?: string }>();
+    const { username: paramsUsername, productSlug: urlProductSlug } = useParams<{ username?: string; productSlug?: string }>();
+    // When rendered on a personal subdomain (e.g. https://slowbeardigger.goxmr.click/),
+    // there is no `:username` segment in the path, so the caller passes the user
+    // derived from window.location.hostname through usernameOverride.
+    const username = usernameOverride || paramsUsername;
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);

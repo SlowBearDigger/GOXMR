@@ -1,5 +1,34 @@
 # GOXMR Changelog
 
+## v2.3.0 — 2026-05-29
+
+Public profile redesign (option A: editorial stack).
+
+### Hero
+- New QuickActions row under the bio with up to 4 buttons: Tip XMR / Contact / Share / Store. Each button only renders if the corresponding surface exists on the profile (no XMR wallet, no Tip button; no PGP key, no Contact button)
+- Tip button opens TipXmrModal — large QR for `monero:<addr>`, OpenAlias handle copy, raw address copy
+- Share button opens ShareModal — three URLs (subdomain, OpenAlias, classic path) each with a downloadable QR and one-click copy
+- Contact and Store buttons smooth-scroll to their on-page anchors
+
+### Section reorder
+- Gallery now renders inside the hero card area, immediately after the bio, ahead of links and store. Visitors see media first when there is any
+- Store keeps its mid-page slot but gets a `store-section` anchor for QuickActions
+- Encrypted contact form gets `contact-form` anchor
+- The CTA "Forge Your Own Base" demoted to a small footer link
+
+### Federation handles row
+- New row of compact chips at the bottom of every profile listing federated surfaces: OpenAlias, NIP-05, Mastodon (linked to external account if set), Tor v3 mirror
+
+### Music player
+- SonicModule now floats fixed bottom-right on tablet/desktop, full-width footer on mobile. Persistent across all sections instead of being stuck at the bottom of the document
+
+### Backend
+- Added `pinned_section` column to users (about | links | gallery | store, default 'about') for an upcoming per-user lead-section selector
+- `/api/user/:name` now exposes `pinned_section`, `has_mastodon`, and `mastodon_handle` so the public surface can render Mastodon chips and forwarders without an extra round-trip
+- `PUT /api/me` accepts `pinned_section`
+
+---
+
 ## v2.2.1 — 2026-05-29
 
 Gallery improvements.

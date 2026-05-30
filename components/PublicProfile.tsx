@@ -8,6 +8,10 @@ import { StoreCheckout } from './StoreCheckout';
 import { StoreDisclaimerBanner, StoreDisclaimerModal } from './StoreDisclaimer';
 import { EncryptedContactForm } from './EncryptedContactForm';
 import { PublicGallery } from './PublicGallery';
+import { QuickActions } from './QuickActions';
+import { ShareModal } from './ShareModal';
+import { TipXmrModal } from './TipXmrModal';
+import { FederationHandlesRow } from './FederationHandlesRow';
 import QRCodeStyling from 'qr-code-styling';
 import { productSlug as makeProductSlug, parseProductSlug } from '../utils/productSlug';
 
@@ -77,6 +81,12 @@ export const PublicProfile: React.FC = () => {
     const [links, setLinks] = useState<any[]>([]);
     const [wallets, setWallets] = useState<any[]>([]);
     const [copied, setCopied] = useState<string | null>(null);
+    const [shareOpen, setShareOpen] = useState(false);
+    const [tipOpen, setTipOpen] = useState(false);
+    const scrollToId = (id: string) => {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
 
     const [qrDesign, setQrDesign] = useState<any>({
         color: '#F26822',
@@ -527,12 +537,31 @@ export const PublicProfile: React.FC = () => {
                                 ))}
                             </div>
 
-                            <p className="font-mono text-sm sm:text-base text-gray-700 w-full max-w-lg mx-auto mb-10 leading-relaxed border-l-4 border-accent pl-4 text-left bg-gray-50/50 py-3" style={{ color: TC || 'inherit' }}>
+                            <p className="font-mono text-sm sm:text-base text-gray-700 w-full max-w-lg mx-auto mb-2 leading-relaxed border-l-4 border-accent pl-4 text-left bg-gray-50/50 py-3" style={{ color: TC || 'inherit' }}>
                                 {profile?.bio || "No manifesto encrypted."}
                             </p>
+
+                            {/* Quick actions — Tip / Contact / Share / Store. Only enabled
+                                buttons render; the row is hidden if the profile has none of these. */}
+                            <QuickActions
+                                accentColor={AC}
+                                hasXmr={wallets.some(w => w.currency === 'XMR' && w.address)}
+                                hasPgp={!!profile?.has_pgp}
+                                hasStore={hasStore && (storeProducts.length > 0 || !!storeSearch || !!storeTypeFilter)}
+                                onTip={() => setTipOpen(true)}
+                                onContact={() => scrollToId('contact-form')}
+                                onShare={() => setShareOpen(true)}
+                                onStore={() => scrollToId('store-section')}
+                            />
                         </div>
 
-                        <div className="space-y-4 mb-12">
+                        {/* Gallery now renders inside the hero card area, ahead of links and store,
+                            so visitors see media first when there is any. */}
+                        <div id="gallery-section">
+                            <PublicGallery username={username || ''} />
+                        </div>
+
+                        <div id="links-section" className="space-y-4 mb-12 mt-10">
                             {links.map((link, i) => (
                                 <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
                                     onClick={() => { if ((link as any).id) navigator.sendBeacon(`/api/analytics/click/${(link as any).id}`); }}
@@ -557,7 +586,7 @@ export const PublicProfile: React.FC = () => {
 
                         {/* Store Section */}
                         {hasStore && (storeProducts.length > 0 || storeSearch || storeTypeFilter) && (
-                            <div className="border-t-4 border-black pt-8 sm:pt-10 mb-10" style={{ borderColor: BC }}>
+                            <div id="store-section" className="border-t-4 border-black pt-8 sm:pt-10 mb-10" style={{ borderColor: BC }}>
                                 <div className="flex items-center gap-2 mb-6 justify-center">
                                     <div className="w-8 sm:w-12 h-1 bg-accent"></div>
                                     <h3 className="font-mono font-black uppercase text-lg sm:text-xl" style={{ color: TC || '#000' }}>
@@ -820,31 +849,49 @@ export const PublicProfile: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Public gallery (only renders if the user has at least one image) */}
-                    <PublicGallery username={username || ''} />
-
-                    {/* Encrypted Contact Form (only if user has PGP key) */}
+                    {/* Encrypted Contact Form (only if user has PGP key) — anchored for QuickActions */}
                     {profile?.has_pgp && (
-                        <div className="max-w-md mx-auto mt-10 mb-6">
+                        <div id="contact-form" className="max-w-md mx-auto mt-10 mb-6">
                             <EncryptedContactForm username={username || ''} accentColor={accentColor} />
                         </div>
                     )}
 
-                    <div className="text-center mt-12 mb-16 pb-8">
-                        <RouterLink to="/" className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 sm:px-8 sm:py-4 font-mono font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none text-xs sm:text-sm">
-                            Forge Your Own Base <Zap size={16} />
+                    {/* Federated handles row — small chips showing OpenAlias / NIP-05 / Mastodon / Tor */}
+                    <FederationHandlesRow
+                        username={username || ''}
+                        hasNostr={!!profile?.has_nostr}
+                        hasMastodon={!!profile?.has_mastodon}
+                        hasXmr={wallets.some(w => w.currency === 'XMR' && w.address)}
+                        mastodonHandle={profile?.mastodon_handle}
+                    />
+
+                    <div className="text-center mt-10 mb-12 pb-8">
+                        <RouterLink to="/" className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-black/50 dark:text-white/50 hover:text-monero-orange transition-colors">
+                            powered by GOXMR · forge yours <Zap size={11} />
                         </RouterLink>
                     </div>
 
-                    {/* Sonic Module (Lightweight Player) */}
+                    {/* Sonic module — fixed bottom-right on >= sm, full-width footer on mobile */}
                     {profile.music_url && (
-                        <SonicModule
-                            url={profile.music_url}
-                            design={profile.design?.sonicDesign}
-                        />
+                        <div className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-40 w-[calc(100%-1.5rem)] sm:w-[340px] max-w-sm">
+                            <SonicModule
+                                url={profile.music_url}
+                                design={profile.design?.sonicDesign}
+                            />
+                        </div>
                     )}
                 </div>
             </div>
+
+            {shareOpen && (
+                <ShareModal username={username || ''} onClose={() => setShareOpen(false)} />
+            )}
+            {tipOpen && (() => {
+                const xmr = wallets.find(w => w.currency === 'XMR' && w.address);
+                return xmr ? (
+                    <TipXmrModal username={username || ''} address={xmr.address} accentColor={AC} onClose={() => setTipOpen(false)} />
+                ) : null;
+            })()}
         </div>
     );
 };

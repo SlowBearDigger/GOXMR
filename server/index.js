@@ -435,6 +435,13 @@ db.serialize(() => {
             console.error('Migration Error (openalias_wallet_id):', err);
         }
     });
+    // pinned_section: which content block leads on the public profile.
+    // One of: about | links | gallery | store. Default 'about' keeps legacy ordering.
+    db.run("ALTER TABLE users ADD COLUMN pinned_section TEXT DEFAULT 'about'", (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+            console.error('Migration Error (pinned_section):', err);
+        }
+    });
     // gallery_images: per-user public image showcase, rendered on PublicProfile
     db.run(`CREATE TABLE IF NOT EXISTS gallery_images (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -756,15 +763,17 @@ app.get('/api/user/:username', async (req, res) => {
             if (IS_DEV) console.log(`[Cache] Serving ${username} from memory`);
             return res.json(cachedData);
         }
-        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, music_url, design_config, pgp_public_key, nostr_pubkey, created_at, is_premium FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        const user = await dbGet('SELECT id, username, display_name, bio, profile_image, banner_image, music_url, design_config, pgp_public_key, nostr_pubkey, mastodon_handle, pinned_section, created_at, is_premium FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const links = await dbAll('SELECT * FROM links WHERE user_id = ?', [user.id]);
         const wallets = await dbAll('SELECT * FROM wallets WHERE user_id = ?', [user.id]);
-        const { pgp_public_key, nostr_pubkey, ...safePublicUser } = user;
+        const { pgp_public_key, nostr_pubkey, mastodon_handle, ...safePublicUser } = user;
         const profileData = {
             ...safePublicUser,
             has_pgp: !!pgp_public_key,
             has_nostr: !!nostr_pubkey,
+            has_mastodon: !!mastodon_handle,
+            mastodon_handle: mastodon_handle || null,
             links,
             wallets,
             design: user.design_config ? JSON.parse(user.design_config) : null
@@ -837,13 +846,16 @@ app.get('/api/user/:username/trust', async (req, res) => {
 
 app.put('/api/me', authenticateToken, async (req, res) => {
     try {
-        const { display_name, bio, nostr_pubkey, mastodon_handle } = req.body;
+        const { display_name, bio, nostr_pubkey, mastodon_handle, pinned_section } = req.body;
 
-        if (display_name === undefined && bio === undefined && nostr_pubkey === undefined && mastodon_handle === undefined) {
+        if (display_name === undefined && bio === undefined && nostr_pubkey === undefined && mastodon_handle === undefined && pinned_section === undefined) {
             return res.status(400).json({ error: 'No fields to update' });
         }
         if (display_name?.length > 50 || bio?.length > 500) {
             return res.status(400).json({ error: 'Display name (50 chars) or bio (500 chars) too long.' });
+        }
+        if (pinned_section !== undefined && pinned_section !== null && !['about', 'links', 'gallery', 'store'].includes(pinned_section)) {
+            return res.status(400).json({ error: 'pinned_section must be one of about|links|gallery|store' });
         }
 
         // Federation field validation
@@ -870,13 +882,15 @@ app.put('/api/me', authenticateToken, async (req, res) => {
                 display_name = COALESCE(?, display_name),
                 bio = COALESCE(?, bio),
                 nostr_pubkey = CASE WHEN ? = 1 THEN ? ELSE nostr_pubkey END,
-                mastodon_handle = CASE WHEN ? = 1 THEN ? ELSE mastodon_handle END
+                mastodon_handle = CASE WHEN ? = 1 THEN ? ELSE mastodon_handle END,
+                pinned_section = COALESCE(?, pinned_section)
              WHERE id = ?`,
             [
                 display_name !== undefined ? stripHtml(display_name) : null,
                 bio !== undefined ? stripHtml(bio) : null,
                 nostr_pubkey !== undefined ? 1 : 0, norm(nostr_pubkey),
                 mastodon_handle !== undefined ? 1 : 0, norm(mastodon_handle && String(mastodon_handle).trim().replace(/^@/, '')),
+                pinned_section !== undefined ? pinned_section : null,
                 req.user.userId
             ]
         );

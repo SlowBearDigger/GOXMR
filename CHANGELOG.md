@@ -1,5 +1,15 @@
 # GOXMR Changelog
 
+## v2.4.1 — 2026-05-29
+
+Dashboard scroll-flow fix.
+
+### Dashboard
+- Reordered the dashboard JSX sections so the physical render order matches the sidebar nav groups. Clicking "Gallery" no longer jumps below "Wallets"; clicking "Store" no longer jumps past four unrelated tools
+- Final order: Overview, Your handles, Identity, Links, Gallery, Design, Wallets, Store, Drops & Signals, QR foundry, Contact inbox, PGP direct messages, Security & ops
+
+---
+
 ## v2.4.0 — 2026-05-29
 
 Dashboard rework phase 1 + responsive width rhythm on public profile.

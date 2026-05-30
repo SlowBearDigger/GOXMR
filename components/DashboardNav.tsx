@@ -76,60 +76,17 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
         window.scrollTo({ top: y, behavior: 'smooth' });
     };
 
+    // Sidebar layout: sticky-anchored to top-32, capped at viewport height minus
+    // the same offset so the inner content can scroll independently of the page.
+    // The header (Dashboard title) and the action bar (Preview + Deploy) are
+    // pinned at the top and bottom of the box; only the middle nav scrolls.
+    // This guarantees Deploy is always visible even when the user has many sections.
     return (
         <div className="hidden lg:block sticky top-32 w-full self-start">
-            <div className="border border-black dark:border-white bg-white dark:bg-zinc-900 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-colors">
-                <div className="flex items-center gap-2 mb-4 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
-                    <Terminal size={14} className="dark:text-white" />
-                    <h3 className="font-mono font-bold text-[11px] uppercase dark:text-white tracking-wider">Dashboard</h3>
-                </div>
-
-                <div className="space-y-3">
-                    {NAV_GROUPS.map((group) => (
-                        <div key={group.title}>
-                            <p className="font-mono text-[9px] uppercase tracking-widest text-gray-400 dark:text-gray-500 px-2 mb-1">
-                                {group.title}
-                            </p>
-                            <div className="space-y-0.5">
-                                {group.items.map(item => {
-                                    const isActive = activeSection === item.id;
-                                    const notifKey = NOTIFICATION_MAP[item.id];
-                                    const badgeCount = notifKey && notifications ? notifications[notifKey] || 0 : 0;
-                                    return (
-                                        <button
-                                            key={item.id}
-                                            onClick={() => scrollToSection(item.id)}
-                                            className={`w-full text-left font-mono text-[11px] py-1.5 px-2 flex justify-between items-center group transition-colors ${isActive
-                                                ? 'bg-black dark:bg-white text-white dark:text-black'
-                                                : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'
-                                                }`}
-                                        >
-                                            <span className="inline-flex items-center gap-1.5">
-                                                <span className={isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}>{'>'}</span>
-                                                {item.label}
-                                            </span>
-                                            {badgeCount > 0 && (
-                                                <span className="bg-monero-orange text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{badgeCount}</span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="mt-5 pt-3 border-t-2 border-dashed border-gray-200 dark:border-zinc-800 space-y-2">
-                    {username && (
-                        <a
-                            href={`https://${username.toLowerCase()}.goxmr.click`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full font-mono text-[10px] uppercase tracking-widest font-bold px-3 py-2 border-2 border-black dark:border-white bg-white dark:bg-zinc-900 dark:text-white hover:bg-monero-orange hover:text-white hover:border-monero-orange transition-colors inline-flex items-center justify-center gap-1.5"
-                        >
-                            Preview <ExternalLink size={11} />
-                        </a>
-                    )}
+            <div className="flex flex-col max-h-[calc(100vh-9rem)] border border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-colors">
+                {/* Action bar pinned at the top — Deploy is the most important
+                    affordance, the user should never have to hunt for it. */}
+                <div className="shrink-0 p-3 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 space-y-2 bg-white dark:bg-zinc-900">
                     <button
                         onClick={onDeploy}
                         disabled={isDeploying}
@@ -144,6 +101,58 @@ export const DashboardNav: React.FC<DashboardNavProps> = ({ activeSection, isDep
                             : deployed ? <><Check size={12} /> Synced</>
                             : <><Save size={12} /> Deploy changes</>}
                     </button>
+                    {username && (
+                        <a
+                            href={`https://${username.toLowerCase()}.goxmr.click`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full font-mono text-[10px] uppercase tracking-widest font-bold px-3 py-2 border-2 border-black dark:border-white bg-white dark:bg-zinc-900 dark:text-white hover:bg-monero-orange hover:text-white hover:border-monero-orange transition-colors inline-flex items-center justify-center gap-1.5"
+                        >
+                            Preview <ExternalLink size={11} />
+                        </a>
+                    )}
+                </div>
+
+                {/* Section index. Scrolls independently when the list is too long. */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-3">
+                    <div className="flex items-center gap-2 mb-3 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
+                        <Terminal size={14} className="dark:text-white" />
+                        <h3 className="font-mono font-bold text-[11px] uppercase dark:text-white tracking-wider">Sections</h3>
+                    </div>
+                    <div className="space-y-3">
+                        {NAV_GROUPS.map((group) => (
+                            <div key={group.title}>
+                                <p className="font-mono text-[9px] uppercase tracking-widest text-gray-400 dark:text-gray-500 px-2 mb-1">
+                                    {group.title}
+                                </p>
+                                <div className="space-y-0.5">
+                                    {group.items.map(item => {
+                                        const isActive = activeSection === item.id;
+                                        const notifKey = NOTIFICATION_MAP[item.id];
+                                        const badgeCount = notifKey && notifications ? notifications[notifKey] || 0 : 0;
+                                        return (
+                                            <button
+                                                key={item.id}
+                                                onClick={() => scrollToSection(item.id)}
+                                                className={`w-full text-left font-mono text-[11px] py-1.5 px-2 flex justify-between items-center group transition-colors ${isActive
+                                                    ? 'bg-black dark:bg-white text-white dark:text-black'
+                                                    : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'
+                                                    }`}
+                                            >
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <span className={isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}>{'>'}</span>
+                                                    {item.label}
+                                                </span>
+                                                {badgeCount > 0 && (
+                                                    <span className="bg-monero-orange text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{badgeCount}</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>

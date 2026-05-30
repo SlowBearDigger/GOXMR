@@ -1,5 +1,17 @@
 # GOXMR Changelog
 
+## v2.4.5 — 2026-05-29
+
+Sidebar Deploy button always visible on desktop.
+
+### Dashboard
+- The desktop sidebar's Deploy button was sitting at the bottom of a single block, taller than the viewport on most screens. Sticky positioning meant the button silently slipped below the fold and the user could not save profile customisation without scrolling
+- Sidebar restructured into three regions inside one sticky box:
+  pinned action bar (Deploy + Preview) at the top, scrollable section index in the middle (`overflow-y-auto`, `flex-1`), and an internal `max-h-[calc(100vh-9rem)]` cap so the whole box always fits the viewport. The middle scrolls; the action bar never moves
+- Deploy is now the FIRST thing in the sidebar instead of the last, matching the priority of the action
+
+---
+
 ## v2.4.4 — 2026-05-29
 
 Subdomain routing on the client + mobile Deploy/Preview surface.

@@ -68,7 +68,7 @@ export const StoreProductGrid: React.FC<StoreProductGridProps> = ({ products, on
                     ⇄ {displayCurrency.toUpperCase()}
                 </button>
             </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {products.map(product => {
                 const isPgpLocked = product.visibility === 'pgp_only';
                 const TypeIcon = TYPE_ICONS[product.product_type] || Package;

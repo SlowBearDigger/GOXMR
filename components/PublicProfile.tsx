@@ -499,7 +499,7 @@ export const PublicProfile: React.FC = () => {
                     )}
                 </div>
 
-                <div className="w-full max-w-3xl px-4 sm:px-6 relative z-20 mb-24 -mt-24 sm:-mt-32 animate-in slide-in-from-bottom-10 fade-in duration-700">
+                <div className="w-full max-w-3xl xl:max-w-5xl px-4 sm:px-6 relative z-20 mb-24 -mt-24 sm:-mt-32 animate-in slide-in-from-bottom-10 fade-in duration-700">
                     <div className="bg-white/90 backdrop-blur-md border-2 border-black p-5 sm:p-8 md:p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] md:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group card-texture"
                         style={{ borderColor: BC, backgroundColor: BG, boxShadow: `8px 8px 0px 0px ${AC}` }}>
 

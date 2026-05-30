@@ -58,14 +58,14 @@ export const PublicGallery: React.FC<{ username: string }> = ({ username }) => {
 
     return (
         <>
-            <div className="max-w-3xl mx-auto mt-10 px-4">
+            <div className="mt-6 mb-2">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="font-mono font-black uppercase text-xs tracking-wider text-black/70 dark:text-white/70">Gallery</h3>
                     <span className="font-mono text-[10px] text-black/40 dark:text-white/40 uppercase tracking-wider">
                         {images.length} {images.length === 1 ? 'image' : 'images'}
                     </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
                     {images.map((img, i) => (
                         <button
                             key={img.id}

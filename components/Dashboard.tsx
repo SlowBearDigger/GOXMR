@@ -69,7 +69,7 @@ export const Dashboard: React.FC = () => {
     const { setActiveSection: setGlobalSection } = useOutletContext<{ setActiveSection: (section: 'home' | 'learn' | 'guide' | 'tools' | 'contribute') => void }>();
     const [links, setLinks] = useState<Link[]>(INITIAL_LINKS);
     const [wallets, setWallets] = useState<Wallet[]>(INITIAL_WALLETS);
-    const [activeSection, setActiveSection] = useState('identity');
+    const [activeSection, setActiveSection] = useState('overview');
     const addLink = () => {
         const id = Date.now();
         setLinks([...links, { id, type: 'globe', title: 'New Link', url: 'https://google.com' }]);
@@ -506,22 +506,73 @@ export const Dashboard: React.FC = () => {
         newTags[index] = val;
         updateDesign('tags', newTags);
     };
+    // Sidebar highlight tracker. The old version used offsetTop arithmetic which
+    // breaks for descendants of transformed ancestors (the hero card transforms);
+    // IntersectionObserver reads visibility through the layout engine and stays
+    // correct regardless. Sections are "active" while their top edge sits in the
+    // upper band of the viewport (between 100px from the top and 40% from the
+    // bottom). The most recently entered section in that band wins.
     useEffect(() => {
-        const handleScroll = () => {
-            const sections = ['identity', 'profile-links', 'treasury', 'assets', 'qr-foundry', 'design', 'store', 'messages', 'settings'];
-            const scrollPosition = window.scrollY + 200;
-            for (const section of sections) {
-                const element = document.getElementById(section);
-                if (element) {
-                    const { offsetTop, offsetHeight } = element;
-                    if (scrollPosition >= offsetTop && scrollPosition < offsetTop + offsetHeight) {
-                        setActiveSection(section);
-                    }
-                }
-            }
+        const ids = [
+            'overview', 'handles',
+            'identity', 'profile-links', 'gallery', 'design',
+            'treasury', 'store', 'assets', 'qr-foundry',
+            'messages', 'pgp-dms',
+            'settings',
+        ];
+        const observed = ids
+            .map(id => document.getElementById(id))
+            .filter((el): el is HTMLElement => !!el);
+        if (!observed.length) return;
+
+        // Track which sections are currently inside the band. We pick the topmost
+        // one that's visible. This is more stable than "the highest intersection
+        // ratio" because a tall section can otherwise drown out a small one.
+        const visible = new Map<string, number>(); // id -> topY when intersecting
+        const recompute = () => {
+            if (!visible.size) return;
+            const topmost = [...visible.entries()].sort((a, b) => a[1] - b[1])[0];
+            if (topmost) setActiveSection(topmost[0]);
         };
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
+
+        const io = new IntersectionObserver((entries) => {
+            for (const e of entries) {
+                if (e.isIntersecting) visible.set(e.target.id, e.boundingClientRect.top);
+                else visible.delete(e.target.id);
+            }
+            recompute();
+        }, {
+            // Active band: from ~100px below the top (sidebar headroom) to ~60%
+            // from the top. So a section becomes "current" as its top crosses
+            // the band and stays current until the next one enters.
+            rootMargin: '-100px 0px -60% 0px',
+            threshold: 0,
+        });
+
+        observed.forEach(el => io.observe(el));
+
+        // Re-update bounding rects on scroll so the "topmost visible" sort stays
+        // accurate when multiple sections sit in the band (one growing, one
+        // shrinking). Throttled with requestAnimationFrame.
+        let raf = 0;
+        const onScroll = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(() => {
+                raf = 0;
+                for (const id of visible.keys()) {
+                    const el = document.getElementById(id);
+                    if (el) visible.set(id, el.getBoundingClientRect().top);
+                }
+                recompute();
+            });
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+
+        return () => {
+            io.disconnect();
+            window.removeEventListener('scroll', onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
     }, []);
     return (
         <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in zoom-in duration-500">

@@ -1,5 +1,17 @@
 # GOXMR Changelog
 
+## v2.4.3 — 2026-05-29
+
+Dashboard sidebar active-section tracker rewritten.
+
+### Dashboard
+- Replaced the old `offsetTop` arithmetic with an `IntersectionObserver` so the sidebar highlight stays accurate regardless of transforms on ancestor elements. The old version was missing 4 sections (overview, handles, gallery, pgp-dms) and tracking the wrong slot under transformed parents
+- Active section is now the topmost one inside an upper-band rootMargin (`-100px / -60%`), so scrolling normally highlights the next item the moment its top edge crosses the band — and click-to-scroll lands you on the same active highlight without lag
+- requestAnimationFrame-throttled scroll listener keeps the topmost-visible sort accurate when two sections sit in the band at once
+- Default `activeSection` set to `overview` (was `identity`) so a fresh login lands on the right highlight
+
+---
+
 ## v2.4.2 — 2026-05-29
 
 Modal positioning fix.

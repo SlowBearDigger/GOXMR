@@ -575,7 +575,8 @@ export const Dashboard: React.FC = () => {
                 { }
                 <div className="lg:w-3/4 flex flex-col gap-12 transition-colors duration-300">
                     {/* Overview — metric cards + quick-jump shortcuts. First thing after login. */}
-                    <section id="overview" className="scroll-mt-32">
+                    
+<section id="overview" className="scroll-mt-32">
                         <DashboardOverview
                             username={username}
                             profileViews={profileViews}
@@ -583,15 +584,14 @@ export const Dashboard: React.FC = () => {
                         />
                     </section>
 
-                    {/* Section 00 — quick-copy of the three handles every user gets. */}
-                    <section id="handles" className="scroll-mt-32">
+<section id="handles" className="scroll-mt-32">
                         <MyHandlesCard
                             username={username}
                             hasXmrWallet={wallets.some(w => w.currency === 'XMR' && w.address)}
                         />
                     </section>
-                    { }
-                    <section id="identity" className="scroll-mt-32">
+
+<section id="identity" className="scroll-mt-32">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">
                             <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Identity Module</span>
@@ -771,7 +771,7 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </section>
 
-                    <section id="profile-links" className="scroll-mt-32 w-full">
+<section id="profile-links" className="scroll-mt-32 w-full">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
                             <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Social & Profile Links</span>
@@ -810,193 +810,13 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </section>
 
-                    <section id="treasury" className="scroll-mt-32 w-full">
-                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
-                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
-                                <span>Treasury (Wallets)</span>
-                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            </div>
-                            <div className="p-4 flex-1 flex flex-col gap-6">
-                                { }
-                                <PremiumUpgradeCard
-                                    isPremium={isPremium}
-                                    premiumSubaddress={premiumSubaddress}
-                                    premiumActivatedAt={premiumActivatedAt}
-                                    onRefresh={fetchPremiumStatus}
-                                />
-
-                                <div className="space-y-3">
-                                    {wallets.map(wallet => (
-                                        <div key={wallet.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex flex-col gap-2 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all">
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-2">
-                                                    {wallet.currency === 'XMR' ?
-                                                        <div className="w-5 h-5 bg-monero-orange rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">M</div> :
-                                                        <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">B</div>
-                                                    }
-                                                    <input
-                                                        type="text"
-                                                        value={wallet.label}
-                                                        onChange={(e) => updateWallet(wallet.id, { label: e.target.value })}
-                                                        className="font-mono text-xs font-bold bg-transparent outline-none dark:text-white"
-                                                    />
-                                                </div>
-                                                <button onClick={() => removeWallet(wallet.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            </div>
-                                            <div className="relative">
-                                                <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                                                    <WalletIcon size={10} className="text-gray-400" />
-                                                </div>
-                                                <input
-                                                    type="text"
-                                                    value={wallet.address}
-                                                    onChange={(e) => updateWallet(wallet.id, { address: e.target.value })}
-                                                    placeholder="Paste Address"
-                                                    className="w-full pl-6 pr-2 py-1 font-mono text-[10px] bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 focus:border-black dark:focus:border-white outline-none dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <button onClick={addWallet} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
-                                        <Plus size={14} /> ADD WALLET
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="gallery" className="scroll-mt-32">
+<section id="gallery" className="scroll-mt-32">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] p-4">
                             <GalleryEditor />
                         </div>
                     </section>
 
-                    <section id="assets" className="scroll-mt-32 w-full">
-                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
-                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
-                                <span>Cryptographic Assets (Signals & Drops)</span>
-                                <div className="flex gap-2 items-center">
-                                    <Shield size={10} className="text-monero-orange" />
-                                    <span className="text-[8px] opacity-60">SOVEREIGN_STORAGE</span>
-                                </div>
-                            </div>
-                            <div className="p-4 flex-1 space-y-8">
-                                {/* Signals Manager */}
-                                <div>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
-                                            <LinkIcon size={12} className="text-monero-orange" /> Active Signals
-                                        </h4>
-                                        <button onClick={() => setGlobalSection('tools')} className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
-                                            + Create Signal
-                                        </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {userSignals.length === 0 ? (
-                                            <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
-                                                <p className="font-mono text-[9px] text-gray-400 uppercase">No active signals detected</p>
-                                            </div>
-                                        ) : (
-                                            userSignals.map(sig => (
-                                                <div key={sig.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
-                                                    <div className="overflow-hidden">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <a href={`/s/${sig.short_code}`} target="_blank" rel="noopener noreferrer" className="bg-monero-orange text-white text-[8px] font-black px-1 uppercase tracking-tighter hover:bg-black transition-colors">
-                                                                {window.location.host}/s/{sig.short_code}
-                                                            </a>
-                                                            <span className="text-[9px] font-mono font-bold dark:text-gray-400 truncate max-w-[150px] opacity-70">
-                                                                → {sig.original_url}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase underline">
-                                                            <span>Hits: {sig.visit_count}</span>
-                                                            <span>Created: {new Date(sig.created_at).toLocaleDateString()}</span>
-                                                            {sig.expires_at && <span className="text-yellow-500">Expires: {new Date(sig.expires_at).toLocaleDateString()}</span>}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-1">
-                                                        <button onClick={() => editSignal(sig.id, sig.original_url)} className="text-gray-400 hover:text-blue-500 p-1 transition-colors" title="Edit Target URL">
-                                                            <Wrench size={14} />
-                                                        </button>
-                                                        <button onClick={() => deleteSignal(sig.id)} className="text-gray-400 hover:text-red-500 p-1 transition-colors" title="Delete Signal">
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Drops Manager */}
-                                <div>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
-                                            <Lock size={12} className="text-monero-orange" /> Dead Drops
-                                        </h4>
-                                        <button onClick={() => setGlobalSection('tools')} className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
-                                            + Create Drop
-                                        </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {userDrops.length === 0 ? (
-                                            <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
-                                                <p className="font-mono text-[9px] text-gray-400 uppercase">No dead drops in vault</p>
-                                            </div>
-                                        ) : (
-                                            userDrops.map(drop => (
-                                                <div key={drop.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="bg-black dark:bg-white text-white dark:text-black text-[8px] font-black px-1 uppercase tracking-tighter">DROP_{drop.drop_code}</span>
-                                                            <span className="text-[9px] font-mono font-bold dark:text-white uppercase">{drop.encryption_method} ENCRYPTION</span>
-                                                        </div>
-                                                        <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase">
-                                                            <span>Created: {new Date(drop.created_at).toLocaleDateString()}</span>
-                                                            {drop.burn_after_read === 1 && <span className="text-red-500 font-black">BURN_AFTER_READ</span>}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex gap-1">
-                                                        <button onClick={() => extendDrop(drop.id)} className="text-gray-400 hover:text-green-500 p-1 transition-colors" title="Extend Expiration">
-                                                            <Clock size={14} />
-                                                        </button>
-                                                        <button onClick={() => deleteDrop(drop.id)} className="text-gray-400 hover:text-red-500 p-1 transition-colors" title="Burn/Delete Drop">
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-
-                                {!isPremium && (
-                                    <div className="bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-yellow-500 p-3">
-                                        <p className="text-[10px] font-bold dark:text-yellow-500 uppercase leading-tight">
-                                            Sovereign Privacy Advisory: Non-premium assets have limited retention. Upgrade to premium for permanent archival control.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="qr-foundry" className="scroll-mt-32">
-                        <QrGenerator
-                            wallets={wallets}
-                            qrDesign={qrDesign}
-                            onQrDesignChange={setQrDesign}
-                            onUploadLogo={(e) => handleImageUpload(e, 'qr_logo')}
-                            selectedWalletId={qrDesign.selectedWalletId}
-                            onWalletChange={(id) => setQrDesign(prev => ({ ...prev, selectedWalletId: id }))}
-                            onContentChange={(v) => setQrDesign(prev => ({ ...prev, content: v }))}
-                            onCryptoChange={(v) => setQrDesign(prev => ({ ...prev, selectedCrypto: v }))}
-                        />
-                    </section>
-                    { }
-                    <section id="design" className="scroll-mt-32">
+<section id="design" className="scroll-mt-32">
                         <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]">
                             <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
                                 <span>Design Studio</span>
@@ -1322,8 +1142,65 @@ export const Dashboard: React.FC = () => {
                             </div>
                         </div>
                     </section>
-                    { }
-                    <section id="store" className="scroll-mt-32">
+
+<section id="treasury" className="scroll-mt-32 w-full">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                                <span>Treasury (Wallets)</span>
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            </div>
+                            <div className="p-4 flex-1 flex flex-col gap-6">
+                                { }
+                                <PremiumUpgradeCard
+                                    isPremium={isPremium}
+                                    premiumSubaddress={premiumSubaddress}
+                                    premiumActivatedAt={premiumActivatedAt}
+                                    onRefresh={fetchPremiumStatus}
+                                />
+
+                                <div className="space-y-3">
+                                    {wallets.map(wallet => (
+                                        <div key={wallet.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex flex-col gap-2 group hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    {wallet.currency === 'XMR' ?
+                                                        <div className="w-5 h-5 bg-monero-orange rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">M</div> :
+                                                        <div className="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] font-bold text-white border border-black dark:border-white">B</div>
+                                                    }
+                                                    <input
+                                                        type="text"
+                                                        value={wallet.label}
+                                                        onChange={(e) => updateWallet(wallet.id, { label: e.target.value })}
+                                                        className="font-mono text-xs font-bold bg-transparent outline-none dark:text-white"
+                                                    />
+                                                </div>
+                                                <button onClick={() => removeWallet(wallet.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                                    <WalletIcon size={10} className="text-gray-400" />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={wallet.address}
+                                                    onChange={(e) => updateWallet(wallet.id, { address: e.target.value })}
+                                                    placeholder="Paste Address"
+                                                    className="w-full pl-6 pr-2 py-1 font-mono text-[10px] bg-white dark:bg-zinc-700 border border-gray-200 dark:border-zinc-600 focus:border-black dark:focus:border-white outline-none dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button onClick={addWallet} className="w-full border-2 border-dashed border-gray-300 dark:border-zinc-700 p-3 flex items-center justify-center gap-2 font-mono text-xs font-bold text-gray-400 hover:text-monero-orange hover:border-monero-orange transition-colors">
+                                        <Plus size={14} /> ADD WALLET
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+<section id="store" className="scroll-mt-32">
                         <div className="mb-4 flex items-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
                             <h2 className="font-mono font-black uppercase tracking-tighter dark:text-white">08_STORE_OPS</h2>
                         </div>
@@ -1336,14 +1213,137 @@ export const Dashboard: React.FC = () => {
                         />
                     </section>
 
-                    <section id="messages" className="scroll-mt-32">
+<section id="assets" className="scroll-mt-32 w-full">
+                        <div className="border-2 border-black dark:border-white bg-white dark:bg-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] h-full flex flex-col">
+                            <div className="bg-black dark:bg-white text-white dark:text-black p-2 font-mono font-bold text-xs uppercase flex justify-between items-center">
+                                <span>Cryptographic Assets (Signals & Drops)</span>
+                                <div className="flex gap-2 items-center">
+                                    <Shield size={10} className="text-monero-orange" />
+                                    <span className="text-[8px] opacity-60">SOVEREIGN_STORAGE</span>
+                                </div>
+                            </div>
+                            <div className="p-4 flex-1 space-y-8">
+                                {/* Signals Manager */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
+                                            <LinkIcon size={12} className="text-monero-orange" /> Active Signals
+                                        </h4>
+                                        <button onClick={() => setGlobalSection('tools')} className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
+                                            + Create Signal
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {userSignals.length === 0 ? (
+                                            <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
+                                                <p className="font-mono text-[9px] text-gray-400 uppercase">No active signals detected</p>
+                                            </div>
+                                        ) : (
+                                            userSignals.map(sig => (
+                                                <div key={sig.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
+                                                    <div className="overflow-hidden">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <a href={`/s/${sig.short_code}`} target="_blank" rel="noopener noreferrer" className="bg-monero-orange text-white text-[8px] font-black px-1 uppercase tracking-tighter hover:bg-black transition-colors">
+                                                                {window.location.host}/s/{sig.short_code}
+                                                            </a>
+                                                            <span className="text-[9px] font-mono font-bold dark:text-gray-400 truncate max-w-[150px] opacity-70">
+                                                                → {sig.original_url}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase underline">
+                                                            <span>Hits: {sig.visit_count}</span>
+                                                            <span>Created: {new Date(sig.created_at).toLocaleDateString()}</span>
+                                                            {sig.expires_at && <span className="text-yellow-500">Expires: {new Date(sig.expires_at).toLocaleDateString()}</span>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => editSignal(sig.id, sig.original_url)} className="text-gray-400 hover:text-blue-500 p-1 transition-colors" title="Edit Target URL">
+                                                            <Wrench size={14} />
+                                                        </button>
+                                                        <button onClick={() => deleteSignal(sig.id)} className="text-gray-400 hover:text-red-500 p-1 transition-colors" title="Delete Signal">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Drops Manager */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h4 className="font-mono font-black text-[10px] uppercase flex items-center gap-2 dark:text-white">
+                                            <Lock size={12} className="text-monero-orange" /> Dead Drops
+                                        </h4>
+                                        <button onClick={() => setGlobalSection('tools')} className="text-[9px] font-mono font-bold bg-monero-orange text-white px-2 py-1 uppercase hover:bg-black transition-colors">
+                                            + Create Drop
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {userDrops.length === 0 ? (
+                                            <div className="border border-dashed border-gray-200 dark:border-zinc-800 p-4 text-center">
+                                                <p className="font-mono text-[9px] text-gray-400 uppercase">No dead drops in vault</p>
+                                            </div>
+                                        ) : (
+                                            userDrops.map(drop => (
+                                                <div key={drop.id} className="border border-black dark:border-white p-3 bg-gray-50 dark:bg-zinc-800 flex justify-between items-center group">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="bg-black dark:bg-white text-white dark:text-black text-[8px] font-black px-1 uppercase tracking-tighter">DROP_{drop.drop_code}</span>
+                                                            <span className="text-[9px] font-mono font-bold dark:text-white uppercase">{drop.encryption_method} ENCRYPTION</span>
+                                                        </div>
+                                                        <div className="flex gap-3 text-[8px] font-bold text-gray-400 uppercase">
+                                                            <span>Created: {new Date(drop.created_at).toLocaleDateString()}</span>
+                                                            {drop.burn_after_read === 1 && <span className="text-red-500 font-black">BURN_AFTER_READ</span>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => extendDrop(drop.id)} className="text-gray-400 hover:text-green-500 p-1 transition-colors" title="Extend Expiration">
+                                                            <Clock size={14} />
+                                                        </button>
+                                                        <button onClick={() => deleteDrop(drop.id)} className="text-gray-400 hover:text-red-500 p-1 transition-colors" title="Burn/Delete Drop">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {!isPremium && (
+                                    <div className="bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-yellow-500 p-3">
+                                        <p className="text-[10px] font-bold dark:text-yellow-500 uppercase leading-tight">
+                                            Sovereign Privacy Advisory: Non-premium assets have limited retention. Upgrade to premium for permanent archival control.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+<section id="qr-foundry" className="scroll-mt-32">
+                        <QrGenerator
+                            wallets={wallets}
+                            qrDesign={qrDesign}
+                            onQrDesignChange={setQrDesign}
+                            onUploadLogo={(e) => handleImageUpload(e, 'qr_logo')}
+                            selectedWalletId={qrDesign.selectedWalletId}
+                            onWalletChange={(id) => setQrDesign(prev => ({ ...prev, selectedWalletId: id }))}
+                            onContentChange={(v) => setQrDesign(prev => ({ ...prev, content: v }))}
+                            onCryptoChange={(v) => setQrDesign(prev => ({ ...prev, selectedCrypto: v }))}
+                        />
+                    </section>
+
+<section id="messages" className="scroll-mt-32">
                         <div className="mb-4 flex items-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
                             <h2 className="font-mono font-black uppercase tracking-tighter dark:text-white">09_ENCRYPTED_INBOX</h2>
                         </div>
                         <MessageInbox />
                     </section>
 
-                    <section id="pgp-dms" className="scroll-mt-32">
+<section id="pgp-dms" className="scroll-mt-32">
                         <div className="mb-4 flex items-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-zinc-800 pb-2">
                             <h2 className="font-mono font-black uppercase tracking-tighter dark:text-white">10_PGP_DIRECT_MSGS</h2>
                             <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest">
@@ -1353,7 +1353,7 @@ export const Dashboard: React.FC = () => {
                         <PgpInbox />
                     </section>
 
-                    <section id="settings" className="scroll-mt-32 pb-32">
+<section id="settings" className="scroll-mt-32 pb-32">
                         <Settings
                             links={links}
                             wallets={wallets}
@@ -1366,6 +1366,32 @@ export const Dashboard: React.FC = () => {
                             onUpdateHandle={setHandleConfig}
                         />
                     </section>
+
+
+                    {/* Section 00 — quick-copy of the three handles every user gets. */}
+                    
+                    { }
+                    
+
+                    
+
+                    
+
+                    
+
+                    
+
+                    
+                    { }
+                    
+                    { }
+                    
+
+                    
+
+                    
+
+                    
                 </div>
             </div >
 

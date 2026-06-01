@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Store, Plus, Package, ShoppingCart, Check, Loader2, Trash2, Wrench, Settings, X, Lock, Eye, EyeOff } from 'lucide-react';
 import { showToast } from './Toast';
+import { useModalChrome } from '../hooks/useModalChrome';
 
 interface StoreSectionProps {
     username: string;
@@ -184,6 +186,14 @@ export const StoreSection: React.FC<StoreSectionProps> = ({ username, onOpenAddP
     });
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [settingsError, setSettingsError] = useState('');
+
+    // modal a11y refs
+    const settingsModalRef = useRef<HTMLDivElement>(null);
+    const unlockModalRef = useRef<HTMLDivElement>(null);
+    const settingsTitleId = useId();
+    const unlockTitleId = useId();
+    useModalChrome({ isOpen: settingsOpen, onClose: () => setSettingsOpen(false), contentRef: settingsModalRef });
+    useModalChrome({ isOpen: unlockOpen, onClose: () => setUnlockOpen(false), contentRef: unlockModalRef });
 
     useEffect(() => {
         // Owner-Dashboard mounts this with an empty `username` while /api/me is in flight.
@@ -512,17 +522,26 @@ export const StoreSection: React.FC<StoreSectionProps> = ({ username, onOpenAddP
             </div>
 
             {/* Settings Modal */}
-            {settingsOpen && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            {settingsOpen && createPortal(
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={settingsTitleId}
+                >
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}></div>
-                    <div className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
-                        <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800">
-                            <h3 className="font-mono font-black uppercase text-lg tracking-tighter dark:text-white">Store Settings</h3>
+                    <div
+                        ref={settingsModalRef}
+                        tabIndex={-1}
+                        className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] flex flex-col max-h-[90vh] outline-none"
+                    >
+                        <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800 shrink-0">
+                            <h3 id={settingsTitleId} className="font-mono font-black uppercase text-lg tracking-tighter dark:text-white">Store Settings</h3>
                             <button onClick={() => setSettingsOpen(false)} aria-label="Close" className="p-1.5 hover:bg-red-500 hover:text-white border-2 border-transparent hover:border-black dark:hover:border-white dark:text-white transition-colors">
                                 <X size={18} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-4 overflow-y-auto flex-1">
                             <div>
                                 <label className="font-mono text-xs font-bold uppercase tracking-wider dark:text-white block mb-1">Monero Address *</label>
                                 <input
@@ -674,21 +693,31 @@ export const StoreSection: React.FC<StoreSectionProps> = ({ username, onOpenAddP
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* Unlock Orders Modal (3B) */}
-            {unlockOpen && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            {unlockOpen && createPortal(
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={unlockTitleId}
+                >
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUnlockOpen(false)}></div>
-                    <div className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
-                        <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800">
-                            <h3 className="font-mono font-black uppercase text-lg tracking-tighter dark:text-white flex items-center gap-2"><Lock size={16} /> Unlock Orders</h3>
+                    <div
+                        ref={unlockModalRef}
+                        tabIndex={-1}
+                        className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] flex flex-col max-h-[90vh] outline-none"
+                    >
+                        <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800 shrink-0">
+                            <h3 id={unlockTitleId} className="font-mono font-black uppercase text-lg tracking-tighter dark:text-white flex items-center gap-2"><Lock size={16} /> Unlock Orders</h3>
                             <button onClick={() => setUnlockOpen(false)} aria-label="Close" className="p-1.5 hover:bg-red-500 hover:text-white border-2 border-transparent hover:border-black dark:hover:border-white dark:text-white transition-colors">
                                 <X size={18} />
                             </button>
                         </div>
-                        <div className="p-6 space-y-3">
+                        <div className="p-6 space-y-3 overflow-y-auto flex-1">
                             <p className="font-mono text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
                                 Paste your PGP <span className="font-bold">private</span> key. It stays in this browser tab's memory and <span className="font-bold">never</span> leaves your device — verify in DevTools → Network: no request carries it.
                             </p>
@@ -730,7 +759,8 @@ export const StoreSection: React.FC<StoreSectionProps> = ({ username, onOpenAddP
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* Tabs */}

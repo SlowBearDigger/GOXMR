@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useModalChrome } from '../hooks/useModalChrome';
 
 /** Permanent banner shown on every store page */
 export const StoreDisclaimerBanner: React.FC = () => (
@@ -18,14 +20,28 @@ export const StoreDisclaimerBanner: React.FC = () => (
 /** Checkout confirmation modal — must accept before placing order */
 export const StoreDisclaimerModal: React.FC<{ onAccept: () => void; onCancel: () => void }> = ({ onAccept, onCancel }) => {
     const [accepted, setAccepted] = useState(false);
+    const modalContentRef = useRef<HTMLDivElement>(null);
+    const titleId = useId();
+    useModalChrome({ isOpen: true, onClose: onCancel, contentRef: modalContentRef });
 
-    return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in">
-            <div className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-white max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] animate-scale-in">
+    return createPortal(
+        <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            onClick={onCancel}
+        >
+            <div
+                ref={modalContentRef}
+                tabIndex={-1}
+                onClick={e => e.stopPropagation()}
+                className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-white max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] animate-scale-in outline-none max-h-[90vh] overflow-y-auto"
+            >
                 <div className="p-6">
                     <div className="flex items-center gap-3 mb-4">
                         <ShieldAlert size={24} className="text-yellow-600" />
-                        <h3 className="font-mono font-black text-lg uppercase tracking-tighter dark:text-white">Before You Proceed</h3>
+                        <h3 id={titleId} className="font-mono font-black text-lg uppercase tracking-tighter dark:text-white">Before You Proceed</h3>
                     </div>
 
                     <div className="space-y-3 text-sm font-mono text-gray-700 dark:text-gray-300">
@@ -70,6 +86,7 @@ export const StoreDisclaimerModal: React.FC<{ onAccept: () => void; onCancel: ()
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

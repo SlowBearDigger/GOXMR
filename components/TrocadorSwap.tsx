@@ -1,8 +1,10 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { ArrowRightLeft, ArrowRight, Wallet, ShieldCheck, Loader2, Copy, Check, Terminal, ShoppingBag, History, Search, Filter, Shield, Zap, Globe, Mail, AlertTriangle, Trash2, ChevronDown } from 'lucide-react';
 import { AltchaWidget } from './AltchaWidget';
+import { useModalChrome } from '../hooks/useModalChrome';
 
 // --- Sub-Components ---
 
@@ -69,19 +71,14 @@ export const TrocadorSwap: React.FC = () => {
     const [isLoadingShop, setIsLoadingShop] = useState(false);
     const [orderEmail, setOrderEmail] = useState('');
     const [selectedCard, setSelectedCard] = useState<any>(null);
-
-    // ESC key to close shop modal
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && selectedCard) {
-                setSelectedCard(null);
-                setTradeData(null);
-                setStatus('idle');
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [selectedCard]);
+    const orderModalRef = useRef<HTMLDivElement>(null);
+    const orderTitleId = useId();
+    const closeOrderModal = () => {
+        setSelectedCard(null);
+        setTradeData(null);
+        setStatus('idle');
+    };
+    useModalChrome({ isOpen: !!selectedCard, onClose: closeOrderModal, contentRef: orderModalRef });
     const [orderAmount, setOrderAmount] = useState<number>(0);
     const [currentPage, setCurrentPage] = useState(1);
     const cardsPerPage = 6;
@@ -674,22 +671,29 @@ export const TrocadorSwap: React.FC = () => {
                                 </div>
                             )}
 
-                            {selectedCard && (
-                                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-                                    <div id="item-order-panel" className="bg-white dark:bg-zinc-900 border-4 border-monero-orange p-6 w-full max-w-2xl shadow-[8px_8px_0px_0px_rgba(242,104,34,0.4)] animate-in zoom-in-95 duration-200">
+                            {selectedCard && createPortal(
+                                <div
+                                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto"
+                                    role="dialog"
+                                    aria-modal="true"
+                                    aria-labelledby={orderTitleId}
+                                    onClick={closeOrderModal}
+                                >
+                                    <div
+                                        ref={orderModalRef}
+                                        tabIndex={-1}
+                                        id="item-order-panel"
+                                        onClick={e => e.stopPropagation()}
+                                        className="bg-white dark:bg-zinc-900 border-4 border-monero-orange p-6 w-full max-w-2xl shadow-[8px_8px_0px_0px_rgba(242,104,34,0.4)] animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto outline-none"
+                                    >
                                         <div className="flex justify-between items-start mb-6">
                                             <div>
-                                                <h3 className="font-black text-2xl uppercase dark:text-white leading-none mb-1">{status === 'success' && tradeData ? 'PAYMENT_PENDING' : 'SECURE_PURCHASE'}</h3>
+                                                <h3 id={orderTitleId} className="font-black text-2xl uppercase dark:text-white leading-none mb-1">{status === 'success' && tradeData ? 'PAYMENT_PENDING' : 'SECURE_PURCHASE'}</h3>
                                                 <p className="text-[10px] font-bold text-monero-orange uppercase">{status === 'success' && tradeData ? 'Initialize secure payment stream' : `Item: ${selectedCard.name || selectedCard.brand}`}</p>
                                             </div>
                                             <button
-                                                onClick={() => {
-                                                    setSelectedCard(null);
-                                                    if (status === 'success') {
-                                                        setTradeData(null);
-                                                        setStatus('idle');
-                                                    }
-                                                }}
+                                                onClick={closeOrderModal}
+                                                aria-label="Close"
                                                 className="bg-black dark:bg-white text-white dark:text-black px-2 py-1 uppercase font-black text-[10px] hover:bg-monero-orange transition-colors"
                                             >
                                                 Close [ESC]
@@ -857,7 +861,8 @@ export const TrocadorSwap: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                </div>,
+                                document.body
                             )}
                         </div>
                     )}

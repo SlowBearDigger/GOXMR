@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
+import { useModalChrome } from '../hooks/useModalChrome';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
-import { Twitter, Github, Globe, ExternalLink, Check, Zap, ArrowLeft, Youtube, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Shield, Cpu, AlertTriangle } from 'lucide-react';
+import { Twitter, Github, Globe, ExternalLink, Check, Zap, ArrowLeft, Youtube, Instagram, Twitch, MessageSquare, Send, Mail, Link as LinkIcon, Shield, Cpu, AlertTriangle, X } from 'lucide-react';
 import { GlitchText } from './GlitchText';
 import { TrustBadge } from './TrustBadge';
 import { StoreProductGrid } from './StoreProductGrid';
@@ -136,6 +138,14 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ usernameOverride }
     const [unlockPin, setUnlockPin] = useState('');
     const [unlockError, setUnlockError] = useState('');
     const [unlockLoading, setUnlockLoading] = useState(false);
+
+    // modal a11y refs
+    const unlockModalRef = useRef<HTMLDivElement>(null);
+    const cakeModalRef = useRef<HTMLDivElement>(null);
+    const unlockTitleId = useId();
+    const cakeTitleId = useId();
+    useModalChrome({ isOpen: unlockOpen, onClose: () => setUnlockOpen(false), contentRef: unlockModalRef });
+    useModalChrome({ isOpen: isCakeModalOpen, onClose: () => setIsCakeModalOpen(false), contentRef: cakeModalRef });
 
     // #7: URL ↔ checkout sync. When the URL carries a product slug, open that product's checkout.
     // When the URL drops the slug (e.g. browser back), close the checkout. This is what makes the
@@ -697,15 +707,26 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ usernameOverride }
                         )}
 
                         {/* 3C: Unlock Modal */}
-                        {unlockOpen && (
-                            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                        {unlockOpen && createPortal(
+                            <div
+                                className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby={unlockTitleId}
+                            >
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUnlockOpen(false)}></div>
-                                <div className="relative w-full max-w-md bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
-                                    <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800">
-                                        <h3 className="font-mono font-black uppercase text-base tracking-tighter dark:text-white">Unlock Unlisted Product</h3>
-                                        <button onClick={() => setUnlockOpen(false)} className="font-mono font-black dark:text-white px-2">×</button>
+                                <div
+                                    ref={unlockModalRef}
+                                    tabIndex={-1}
+                                    className="relative w-full max-w-md bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] flex flex-col max-h-[90vh] outline-none"
+                                >
+                                    <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800 shrink-0">
+                                        <h3 id={unlockTitleId} className="font-mono font-black uppercase text-base tracking-tighter dark:text-white">Unlock Unlisted Product</h3>
+                                        <button onClick={() => setUnlockOpen(false)} aria-label="Close" className="p-1.5 hover:bg-red-500 hover:text-white border-2 border-transparent hover:border-black dark:hover:border-white dark:text-white transition-colors">
+                                            <X size={18} />
+                                        </button>
                                     </div>
-                                    <div className="p-5 space-y-3">
+                                    <div className="p-5 space-y-3 overflow-y-auto flex-1">
                                         <p className="font-mono text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
                                             The seller shared a product ID and a PIN with you. Wrong PINs are throttled: 5 attempts then a 1-hour lockout per IP.
                                         </p>
@@ -738,7 +759,8 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ usernameOverride }
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </div>,
+                            document.body
                         )}
 
                         {/* Disclaimer Modal */}
@@ -815,15 +837,26 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ usernameOverride }
                         </div>
 
                         {/* Cake Wallet Safety Modal */}
-                        {isCakeModalOpen && (
-                            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-                                <div className="bg-white border-4 border-black p-6 sm:p-8 max-w-md w-full shadow-[12px_12px_0px_0px_rgba(242,104,34,1)] relative overflow-hidden">
+                        {isCakeModalOpen && createPortal(
+                            <div
+                                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby={cakeTitleId}
+                                onClick={() => setIsCakeModalOpen(false)}
+                            >
+                                <div
+                                    ref={cakeModalRef}
+                                    tabIndex={-1}
+                                    onClick={e => e.stopPropagation()}
+                                    className="bg-white border-4 border-black p-6 sm:p-8 max-w-md w-full shadow-[12px_12px_0px_0px_rgba(242,104,34,1)] relative overflow-hidden max-h-[90vh] overflow-y-auto outline-none"
+                                >
                                     <div className="absolute top-0 right-0 w-12 h-12 bg-monero-orange clip-path-polygon-[100%_0,0_0,100%_100%]"></div>
                                     <div className="flex flex-col items-center text-center">
                                         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
                                             <AlertTriangle size={32} className="text-red-600" />
                                         </div>
-                                        <h2 className="text-2xl font-black font-mono uppercase tracking-tighter mb-4">SECURITY_PROTOCOL_REQUIRED</h2>
+                                        <h2 id={cakeTitleId} className="text-2xl font-black font-mono uppercase tracking-tighter mb-4">SECURITY_PROTOCOL_REQUIRED</h2>
                                         <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 text-left">
                                             <p className="font-mono text-xs text-red-700 font-bold uppercase mb-2">⚠ VERIFICATION_WARNING:</p>
                                             <p className="font-mono text-[10px] sm:text-xs text-red-600">
@@ -850,7 +883,8 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ usernameOverride }
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </div>,
+                            document.body
                         )}
                     </div>
 

@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Copy, Check, Loader2, ShoppingCart, Lock, Eye } from 'lucide-react';
 import { showToast } from './Toast';
 import QRCodeStyling from 'qr-code-styling';
 import { fetchRates, convertFromXMR, formatFiat, type RatesMap, type CurrencyCode, type FiatCode } from '../utils/rates';
 import { saveOrder } from '../utils/orderHistory';
+import { useModalChrome } from '../hooks/useModalChrome';
 
 type BuyerFormField = { key: string; label: string; type: 'text' | 'textarea' | 'email'; required: boolean };
 
@@ -79,6 +81,9 @@ export const StoreCheckout: React.FC<StoreCheckoutProps> = ({ product, sellerUse
     const [digitalContent, setDigitalContent] = useState<any[]>([]);
 
     const qrRef = useRef<HTMLDivElement>(null);
+    const modalContentRef = useRef<HTMLDivElement>(null);
+    const titleId = useId();
+    useModalChrome({ isOpen: true, onClose, contentRef: modalContentRef });
     const [qrCode] = useState(() => new QRCodeStyling({
         width: 180,
         height: 180,
@@ -247,21 +252,32 @@ export const StoreCheckout: React.FC<StoreCheckoutProps> = ({ product, sellerUse
         } catch { }
     };
 
-    return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
-            <div className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-white max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] my-4 animate-scale-in">
+    return createPortal(
+        <div
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            onClick={onClose}
+        >
+            <div
+                ref={modalContentRef}
+                tabIndex={-1}
+                onClick={e => e.stopPropagation()}
+                className="bg-white dark:bg-zinc-900 border-2 border-black dark:border-white max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] my-4 animate-scale-in outline-none flex flex-col max-h-[90vh]"
+            >
                 {/* Header */}
-                <div className="flex justify-between items-center p-4 border-b-2 border-black dark:border-white">
+                <div className="flex justify-between items-center p-4 border-b-2 border-black dark:border-white shrink-0">
                     <div className="flex items-center gap-2">
                         <ShoppingCart size={16} style={{ color: AC }} />
-                        <span className="font-mono font-black text-sm uppercase dark:text-white">Checkout</span>
+                        <span id={titleId} className="font-mono font-black text-sm uppercase dark:text-white">Checkout</span>
                     </div>
-                    <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
+                    <button onClick={onClose} aria-label="Close" className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors">
                         <X size={16} className="dark:text-white" />
                     </button>
                 </div>
 
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-4 overflow-y-auto flex-1">
                     {/* Product summary */}
                     <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-zinc-700">
                         {product.thumbnail_url ? (
@@ -556,6 +572,7 @@ export const StoreCheckout: React.FC<StoreCheckoutProps> = ({ product, sellerUse
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

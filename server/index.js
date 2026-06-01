@@ -2904,6 +2904,23 @@ app.get('/api/status', async (req, res) => {
 });
 console.log('Store API endpoints registered');
 
+// ── GoXMR Pay ──────────────────────────────────────────────────────────────
+// Payment gateway product served from /pay/* on apex (money.goxmr.click in
+// Phase 2). Schema + routes + 2 background loops:
+//   - paymentScanner: order-expiry tick + webhook retry queue
+//   - walletScanner:  per-merchant view-only wallet scan to detect arrivals
+// Reuses the same Express app and SQLite handle so hosting cost is zero; a
+// future split into its own process is a rename-prefix away.
+const { applyPaySchema } = require('./pay/schema');
+const { mountPayRoutes } = require('./pay/routes');
+const { startPaymentScanner, queueWebhook } = require('./pay/paymentScanner');
+const { startWalletScanner } = require('./pay/wallet_scanner');
+applyPaySchema(db);
+mountPayRoutes(app, { dbGet, dbAll, dbRun, moneroMonitor, logError, JWT_SECRET, redactIp });
+startPaymentScanner({ dbAll, dbRun, dbGet, logError });
+startWalletScanner({ dbAll, dbRun, dbGet, queueWebhook, logError });
+console.log('GoXMR Pay endpoints registered (/pay/*)');
+
 // ---- MIGRATION ENDPOINT (hit once after deploy) ----
 app.get('/api/run-migrations', async (req, res) => {
     const results = [];

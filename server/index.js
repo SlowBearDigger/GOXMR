@@ -661,16 +661,17 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
                     const safeTitle = stripHtml(l.title);
                     const safeUrl = stripHtml(l.url);
 
-                    if (l.id) {
-                        // Update existing link
-                        const exists = existingLinks.find(el => el.id === l.id);
-                        if (exists) {
-                            await dbRun('UPDATE links SET type = ?, title = ?, url = ?, icon = ? WHERE id = ? AND user_id = ?',
-                                [l.type, safeTitle, safeUrl, l.icon, l.id, userId]);
-                            processedLinkIds.add(l.id);
-                        }
+                    // the client assigns Date.now() as a temporary id for newly-added
+                    // links (so React can key them in the list). that id never matches
+                    // a DB row, so we cannot use `l.id is truthy` as a "this is an
+                    // existing row" signal — match against the existing rows directly
+                    // and fall through to INSERT for anything we don't find.
+                    const exists = l.id ? existingLinks.find(el => el.id === l.id) : null;
+                    if (exists) {
+                        await dbRun('UPDATE links SET type = ?, title = ?, url = ?, icon = ? WHERE id = ? AND user_id = ?',
+                            [l.type, safeTitle, safeUrl, l.icon, l.id, userId]);
+                        processedLinkIds.add(l.id);
                     } else {
-                        // Insert new link
                         const result = await dbRun('INSERT INTO links (user_id, type, title, url, icon) VALUES (?, ?, ?, ?, ?)',
                             [userId, l.type, safeTitle, safeUrl, l.icon]);
                         processedLinkIds.add(result.lastID);

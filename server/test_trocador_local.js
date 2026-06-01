@@ -5,7 +5,7 @@ let TROCADOR_API_KEY = process.env.TROCADOR_API_KEY;
 if (!TROCADOR_API_KEY) process.exit(1);
 TROCADOR_API_KEY = TROCADOR_API_KEY.trim();
 
-console.log(`🔑 Testing Key: ${TROCADOR_API_KEY.substring(0, 4)}...4Ex2 (Len: ${TROCADOR_API_KEY.length})`);
+console.log(`🔑 Testing Key: <redacted> (Len: ${TROCADOR_API_KEY.length})`);
 
 const tests = [
     { name: 'Standard /coins', url: 'https://api.trocador.app/coins', headers: { 'API-Key': TROCADOR_API_KEY } },

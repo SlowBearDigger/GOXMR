@@ -12,8 +12,8 @@ const FOOTER_LINKS = [
     { name: 'Telegram', url: 'https://t.me/SlowBearDigger' },
     { name: 'Monerica', url: 'https://monerica.com/freelancers/software-developers/slowbeardigger' },
     { name: 'Simplex', url: 'https://smp11.simplex.im/a#or5wpSRvYq4UrM1ASZ0qgDIiGON8lcEQXitc1gREJys' },
-    { name: 'XMRChat', url: 'https://goxmr.click/xmrchat.com/slowbeardigger' },
-    { name: 'GitHub', url: 'https://github.com/SlowBearDigger/' },
+    { name: 'XMRChat', url: 'https://xmrchat.com/slowbeardigger' },
+    { name: 'GitHub', url: 'https://github.com/SlowBearDigger/GOXMR' },
     { name: 'XMR Bazaar', url: 'https://xmrbazaar.com/user/SlowBearDigger/' },
     { name: 'X (Twitter)', url: 'https://x.com/SlowBearDigger' },
 ];

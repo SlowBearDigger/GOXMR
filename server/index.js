@@ -605,31 +605,48 @@ app.post('/api/me/premium/check', authenticateToken, async (req, res) => {
         const { txid } = req.body;
         console.log(`[PREMIUM] Manual check requested by ${req.user.username}. TXID Provided: ${!!txid}`);
 
-        let customMessage = null;
+        // status drives the UI. don't conflate "the request worked" with "premium activated":
+        //   'activated'  → premium turned on (now or already)
+        //   'pending'    → tx found but not enough confirmations yet
+        //   'not_found'  → tx id not in the user's subaddress history
+        //   'scanning'   → no txid provided, started a background sweep
+        let status = 'scanning';
+        let message = null;
 
         if (txid) {
             const result = await moneroMonitor.checkPaymentByTxid(req.user.userId, txid);
             if (result.found && result.valid) {
-                customMessage = "Transaction Confirmed! Premium Activated.";
+                status = 'activated';
+                message = 'Transaction confirmed — premium is now active.';
             } else if (result.found && !result.valid) {
-                customMessage = `Transaction found but not ready: ${result.reason}`;
+                status = 'pending';
+                // result.reason already reads like a sentence ("Waiting for confirmations (0/1)")
+                message = result.reason || 'Transaction found but still waiting for confirmations.';
             } else {
-                customMessage = "Transaction ID not found in your subaddress history.";
+                status = 'not_found';
+                message = 'No matching transaction in your subaddress history yet. If you just paid, wait ~2 minutes and try again.';
             }
         } else {
             await moneroMonitor.forceCheck();
+            message = 'Background scan started. Refresh in a few seconds.';
         }
 
-        // Re-fetch user status
+        // Re-fetch user status — the txid may have already been processed and flipped is_premium.
         const user = await dbGet('SELECT is_premium FROM users WHERE id = ?', [req.user.userId]);
+        const isPremium = !!user.is_premium;
+        if (isPremium && status !== 'activated') status = 'activated';
+
+        // success now reflects whether premium is on, not just whether the handler ran cleanly.
+        // 'pending' is still a successful detection in terms of UX, just not the terminal state.
         res.json({
-            success: true,
-            isPremium: !!user.is_premium,
-            message: user.is_premium ? (customMessage || 'Premium status confirmed!') : (customMessage || 'No confirmed payment found yet. Scanning...')
+            success: isPremium || status === 'pending' || status === 'scanning',
+            status,
+            isPremium,
+            message: isPremium ? (message || 'Premium status confirmed.') : (message || 'No confirmed payment found yet.')
         });
     } catch (err) {
         console.error('Manual Premium Check Error:', err);
-        res.status(500).json({ error: err.message || 'Manual check failed' });
+        res.status(500).json({ success: false, status: 'error', error: err.message || 'Manual check failed' });
     }
 });
 const dbAll = (query, params) => {

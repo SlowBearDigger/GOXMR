@@ -1,25 +1,22 @@
-// GoXMR Pay embed shim. Drop one <script src="https://money.goxmr.click/pay/embed/pay.js">
+// GoXMR Pay embed shim. Drop one <script src="https://goxmr.click/pay/embed/pay.js">
 // on any page and turn elements with data-goxmr-pay attributes into checkout buttons.
 //
 // Usage:
 //   <button data-goxmr-pay
-//           data-merchant="mch_xxx"  (or full api creates the order ahead of time)
-//           data-amount="0.05"
-//           data-currency="XMR"
-//           data-order-id="ORDER-42"
+//           data-order-id="ord_xxx"
 //           data-redirect="https://your-site.com/thanks">
 //     Pay 0.05 XMR
 //   </button>
 //
-// The shim opens money.goxmr.click/checkout/<order_id> as a centered popup. Status
+// Opens https://goxmr.click/pay/checkout/<order_id> as a centered popup. Status
 // polling and webhook delivery happen entirely server-side on the gateway.
 
 (function () {
     'use strict';
-    var BASE = 'https://money.goxmr.click';
+    var BASE = 'https://goxmr.click';
 
     function openCheckout(orderId) {
-        var url = BASE + '/checkout/' + encodeURIComponent(orderId);
+        var url = BASE + '/pay/checkout/' + encodeURIComponent(orderId);
         var w = 480, h = 720;
         var x = (screen.width - w) / 2;
         var y = (screen.height - h) / 2;
@@ -33,12 +30,12 @@
             e.preventDefault();
             var orderId = el.getAttribute('data-order-id');
             if (orderId) return openCheckout(orderId);
-            // Server-less mode: hit the public create endpoint with merchant + amount
-            // (this requires merchant to expose a "public price" endpoint or have a
-            // pre-shared API key, which is bad practice for embed. v1 requires that
-            // the merchant create the order server-side and pass data-order-id here.)
+            // v1 requires the merchant to create the order server-side (POST
+            // /pay/v1/orders) and pass the resulting order_id in data-order-id.
+            // server-less mode would require shipping an API key to the browser,
+            // which would let any visitor mint orders against the merchant's quota.
             console.warn('[goxmr-pay] data-order-id missing. Create the order server-side and pass it in the button attribute.');
-            alert('GoXMR Pay: missing data-order-id. See https://money.goxmr.click/docs');
+            alert('GoXMR Pay: missing data-order-id. See https://goxmr.click/pay/docs');
         });
     }
 

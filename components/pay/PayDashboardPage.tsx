@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Copy, Check, RefreshCw, AlertTriangle, Eye, EyeOff, Save } from 'lucide-react';
 import { PayLayout, payApi } from './PayLayout';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { showToast } from '../Toast';
+
+const ORDERS_PAGE_SIZE = 50;
+const ORDERS_REFRESH_MS = 30 * 1000;
 
 // merchant dashboard. four panels: account, wallet config, api key, orders.
 // reads goxmr_pay_token from localStorage; redirects to /pay/login if absent.
@@ -56,10 +60,15 @@ export const PayDashboardPage: React.FC = () => {
     const [optInDirectory, setOptInDirectory] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    // orders pagination
+    const [ordersOffset, setOrdersOffset] = useState(0);
+    const [ordersFull, setOrdersFull] = useState(false); // true if last page returned ORDERS_PAGE_SIZE rows
+
     // api key reveal — only present right after rotation, never round-tripped
     const [revealedKey, setRevealedKey] = useState<string | null>(null);
     const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
     const [rotating, setRotating] = useState(false);
+    const [confirmRotateOpen, setConfirmRotateOpen] = useState(false);
 
     useEffect(() => {
         if (!localStorage.getItem('goxmr_pay_token')) {
@@ -69,15 +78,40 @@ export const PayDashboardPage: React.FC = () => {
         load();
     }, []);
 
+    // refresh orders silently every 30s. payApi handles 401 globally so a stale
+    // session just bounces the user to /pay/login — we don't need a special path.
+    useEffect(() => {
+        const id = setInterval(() => {
+            loadOrders(ordersOffset).catch(() => {});
+        }, ORDERS_REFRESH_MS);
+        return () => clearInterval(id);
+    }, [ordersOffset]);
+
+    // when offset changes (Prev/Next clicked), pull that page.
+    useEffect(() => {
+        if (!merchant) return; // don't fire before initial load completes
+        loadOrders(ordersOffset).catch(() => {});
+    }, [ordersOffset]);
+
+    const loadOrders = async (offset: number) => {
+        const ord = await payApi(`/pay/admin/orders?limit=${ORDERS_PAGE_SIZE}&offset=${offset}`);
+        const rows = ord.orders || [];
+        setOrders(rows);
+        setOrdersFull(rows.length === ORDERS_PAGE_SIZE);
+    };
+
     const load = async () => {
         setLoading(true);
         try {
             const [m, ord] = await Promise.all([
                 payApi('/pay/admin/me'),
-                payApi('/pay/admin/orders?limit=50'),
+                payApi(`/pay/admin/orders?limit=${ORDERS_PAGE_SIZE}&offset=0`),
             ]);
             setMerchant(m);
-            setOrders(ord.orders || []);
+            const rows = ord.orders || [];
+            setOrders(rows);
+            setOrdersFull(rows.length === ORDERS_PAGE_SIZE);
+            setOrdersOffset(0);
             setWalletAddr(m.monero_address || '');
             setRestoreHeight(m.restore_height ? String(m.restore_height) : '');
             setBusinessName(m.business_name || '');
@@ -86,11 +120,7 @@ export const PayDashboardPage: React.FC = () => {
             // view_key is never returned in /me for safety — keep input empty
             setViewKey('');
         } catch (e: any) {
-            if (/login required|invalid token/i.test(e.message)) {
-                localStorage.removeItem('goxmr_pay_token');
-                navigate('/pay/login');
-                return;
-            }
+            // payApi already redirects on 401; anything else surfaces as an error banner
             setError(e.message);
         } finally {
             setLoading(false);
@@ -122,8 +152,8 @@ export const PayDashboardPage: React.FC = () => {
         }
     };
 
-    const rotateKey = async () => {
-        if (!confirm('Rotating revokes the previous API key. Any integration using it will break until you update it. Continue?')) return;
+    const performRotate = async () => {
+        setConfirmRotateOpen(false);
         setRotating(true);
         try {
             const r = await payApi('/pay/admin/api-key/rotate', { method: 'POST' });
@@ -229,7 +259,7 @@ export const PayDashboardPage: React.FC = () => {
                         <code className="font-mono text-xs bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-2 py-1.5">
                             {merchant.api_key_prefix || '— not yet generated —'}
                         </code>
-                        <button onClick={rotateKey} disabled={rotating}
+                        <button onClick={() => setConfirmRotateOpen(true)} disabled={rotating}
                             className="font-mono text-xs font-bold uppercase px-3 py-2 border-2 border-black dark:border-white hover:bg-monero-orange hover:border-monero-orange hover:text-white inline-flex items-center gap-1.5 disabled:opacity-50">
                             {rotating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                             {merchant.api_key_prefix ? 'Rotate' : 'Generate'} Key
@@ -238,11 +268,13 @@ export const PayDashboardPage: React.FC = () => {
                 </Panel>
 
                 {/* ORDERS */}
-                <Panel title={`Orders (${orders.length})`}>
+                <Panel title={`Orders · auto-refresh 30s`}>
                     {orders.length === 0 ? (
                         <div className="text-center py-8 border-2 border-dashed border-gray-200 dark:border-zinc-700">
-                            <p className="font-mono text-xs text-gray-500 dark:text-gray-400">No orders yet</p>
-                            <p className="font-mono text-[10px] text-gray-400 dark:text-gray-500 mt-1">Create one via <code className="bg-gray-100 dark:bg-zinc-800 px-1">POST /pay/v1/orders</code></p>
+                            <p className="font-mono text-xs text-gray-500 dark:text-gray-400">No orders {ordersOffset > 0 ? 'on this page' : 'yet'}</p>
+                            {ordersOffset === 0 && (
+                                <p className="font-mono text-[10px] text-gray-400 dark:text-gray-500 mt-1">Create one via <code className="bg-gray-100 dark:bg-zinc-800 px-1">POST /pay/v1/orders</code></p>
+                            )}
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -260,7 +292,12 @@ export const PayDashboardPage: React.FC = () => {
                                 <tbody>
                                     {orders.map(o => (
                                         <tr key={o.order_id} className="border-b border-gray-100 dark:border-zinc-800">
-                                            <td className="p-1.5"><code className="break-all">{o.order_id.slice(0, 18)}…</code></td>
+                                            <td className="p-1.5">
+                                                <button onClick={() => { navigator.clipboard.writeText(o.order_id); showToast('Order ID copied', 'info', 1500); }}
+                                                    className="text-left hover:text-monero-orange" title="Click to copy full order_id">
+                                                    <code className="break-all">{o.order_id.slice(0, 18)}…</code>
+                                                </button>
+                                            </td>
                                             <td className="p-1.5">{o.external_order_id || '—'}</td>
                                             <td className="p-1.5 text-monero-orange font-bold">{o.amount_xmr} XMR</td>
                                             <td className="p-1.5"><span className={`px-1.5 py-0.5 border text-[9px] uppercase ${STATUS_COLORS[o.status] || 'bg-gray-100 border-gray-300'}`}>{o.status}</span></td>
@@ -272,8 +309,40 @@ export const PayDashboardPage: React.FC = () => {
                             </table>
                         </div>
                     )}
+                    {/* paginate when either there's a next page (last row count was full) or we're past page 1 */}
+                    {(ordersOffset > 0 || ordersFull) && (
+                        <div className="flex items-center justify-between gap-2 mt-3">
+                            <button
+                                disabled={ordersOffset === 0}
+                                onClick={() => setOrdersOffset(o => Math.max(0, o - ORDERS_PAGE_SIZE))}
+                                className="font-mono text-[10px] font-bold uppercase px-3 py-2 border-2 border-black dark:border-white dark:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black">
+                                ← Prev
+                            </button>
+                            <span className="font-mono text-[10px] text-gray-600 dark:text-gray-400">
+                                {ordersOffset + 1}–{ordersOffset + orders.length}
+                            </span>
+                            <button
+                                disabled={!ordersFull}
+                                onClick={() => setOrdersOffset(o => o + ORDERS_PAGE_SIZE)}
+                                className="font-mono text-[10px] font-bold uppercase px-3 py-2 border-2 border-black dark:border-white dark:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black">
+                                Next →
+                            </button>
+                        </div>
+                    )}
                 </Panel>
             </div>
+
+            <ConfirmDialog
+                isOpen={confirmRotateOpen}
+                title="ROTATE_API_KEY"
+                message={merchant.api_key_prefix
+                    ? `Rotating revokes the previous API key. Any integration using ${merchant.api_key_prefix}… stops working immediately. The new key is shown ONCE — copy it before closing the page. Continue?`
+                    : 'This will generate your first API key and webhook secret. Both are shown ONCE — copy them before closing the page.'}
+                confirmLabel={merchant.api_key_prefix ? 'Rotate Key' : 'Generate Key'}
+                destructive={!!merchant.api_key_prefix}
+                onCancel={() => setConfirmRotateOpen(false)}
+                onConfirm={performRotate}
+            />
         </PayLayout>
     );
 };

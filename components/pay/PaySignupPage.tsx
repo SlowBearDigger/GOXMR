@@ -11,12 +11,14 @@ export const PaySignupPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [businessName, setBusinessName] = useState('');
+    const [acceptTerms, setAcceptTerms] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     const submit = async () => {
         setError('');
         if (password.length < 12) { setError('Password must be at least 12 characters'); return; }
+        if (!acceptTerms) { setError('You must accept the Terms of Use to continue'); return; }
         setLoading(true);
         try {
             const r = await fetch('/pay/admin/register', {
@@ -27,7 +29,6 @@ export const PaySignupPage: React.FC = () => {
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || 'Signup failed');
             localStorage.setItem('goxmr_pay_token', data.token);
-            localStorage.setItem('goxmr_pay_merchant_id', String(data.merchant_id));
             navigate('/pay/dashboard');
         } catch (e: any) {
             setError(e.message);
@@ -56,9 +57,21 @@ export const PaySignupPage: React.FC = () => {
                             className="w-full border-2 border-black dark:border-white bg-white dark:bg-zinc-900 p-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-monero-orange outline-none" />
                     </Field>
 
+                    <label className="flex items-start gap-2 text-[10px] font-mono text-gray-600 dark:text-gray-400 leading-relaxed cursor-pointer">
+                        <input type="checkbox" checked={acceptTerms} onChange={e => setAcceptTerms(e.target.checked)}
+                            className="mt-0.5 accent-monero-orange shrink-0" />
+                        <span>
+                            I have read and accept the{' '}
+                            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="underline text-monero-orange hover:no-underline">
+                                Terms of Use
+                            </Link>
+                            . I take full responsibility for my Monero wallet credentials and any transactions processed through this account.
+                        </span>
+                    </label>
+
                     {error && <p className="text-red-500 text-xs font-mono">{error}</p>}
 
-                    <button onClick={submit} disabled={loading || !email || password.length < 12}
+                    <button onClick={submit} disabled={loading || !email || password.length < 12 || !acceptTerms}
                         className="w-full bg-black dark:bg-white text-white dark:text-black font-mono text-sm font-black uppercase py-3 border-2 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(242,104,34,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                         {loading ? <Loader2 size={14} className="animate-spin" /> : <>Create Account <ArrowRight size={14} /></>}
                     </button>

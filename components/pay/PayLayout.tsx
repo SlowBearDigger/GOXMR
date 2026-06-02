@@ -11,7 +11,6 @@ export const PayLayout: React.FC<{ children: React.ReactNode; bare?: boolean }> 
     const token = typeof window !== 'undefined' ? localStorage.getItem('goxmr_pay_token') : null;
     const logout = () => {
         localStorage.removeItem('goxmr_pay_token');
-        localStorage.removeItem('goxmr_pay_merchant_id');
         navigate('/pay');
     };
     return (
@@ -64,6 +63,9 @@ export const PayLayout: React.FC<{ children: React.ReactNode; bare?: boolean }> 
 
 // shared API helper for merchant-authenticated requests.
 // throws on non-2xx so call sites can use try/catch and react to errors.
+// 401 is handled here, not at each call site: token gets wiped and the page
+// is sent to /pay/login. moving this into payApi means new auth-gated pages
+// don't need to re-implement the redirect dance.
 export async function payApi(path: string, opts: RequestInit = {}) {
     const token = localStorage.getItem('goxmr_pay_token');
     const headers: Record<string, string> = {
@@ -72,6 +74,13 @@ export async function payApi(path: string, opts: RequestInit = {}) {
     };
     if (token) headers['Authorization'] = 'Bearer ' + token;
     const r = await fetch(path, { ...opts, headers });
+    if (r.status === 401) {
+        localStorage.removeItem('goxmr_pay_token');
+        if (typeof window !== 'undefined' && window.location.pathname !== '/pay/login') {
+            window.location.href = '/pay/login';
+        }
+        throw new Error('login required');
+    }
     if (!r.ok) {
         let msg = 'Request failed (' + r.status + ')';
         try { const j = await r.json(); if (j?.error) msg = j.error; } catch {}

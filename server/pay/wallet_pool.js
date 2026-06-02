@@ -38,12 +38,35 @@ function buildNodeList() {
     return list.length ? list : ['https://xmr-node.cakewallet.com:18081'];
 }
 
+// per-merchant async mutex. monero-ts wallet objects are NOT safe for concurrent
+// access — running sync() in the scanner while a request handler calls
+// createSubaddress() against the same wallet deadlocked our first test run.
+// every public method below acquires this lock for the merchant id before
+// touching wallet state.
+function makeQueue() {
+    let chain = Promise.resolve();
+    return (fn) => {
+        const next = chain.then(() => fn());
+        // swallow rejections so subsequent callers aren't poisoned
+        chain = next.catch(() => {});
+        return next;
+    };
+}
+
 class WalletPool {
     constructor() {
-        // merchantId -> { wallet, lastUsed, openLock }
+        // merchantId -> { wallet, lastUsed }
         this.cache = new Map();
+        // merchantId -> queue function (one mutex per merchant)
+        this.locks = new Map();
         this.daemons = buildNodeList();
         this._startReaper();
+    }
+
+    _lockFor(merchantId) {
+        let q = this.locks.get(merchantId);
+        if (!q) { q = makeQueue(); this.locks.set(merchantId, q); }
+        return q;
     }
 
     _startReaper() {
@@ -54,21 +77,20 @@ class WalletPool {
         const now = Date.now();
         for (const [id, entry] of this.cache.entries()) {
             if (now - entry.lastUsed > WALLET_IDLE_TTL_MS) {
-                try { await entry.wallet.close(true); } catch {}
-                this.cache.delete(id);
+                // acquire the lock so we never close a wallet mid-operation
+                await this._lockFor(id)(async () => {
+                    try { await entry.wallet.close(true); } catch {}
+                    this.cache.delete(id);
+                });
                 console.log(`[PAY-POOL] reaped idle wallet merchant=${id}`);
             }
         }
     }
 
-    // get or open the merchant's view-only wallet. caller MUST NOT close it;
-    // the pool owns the lifecycle.
-    async getOrOpen(merchant) {
-        const existing = this.cache.get(merchant.id);
-        if (existing) {
-            existing.lastUsed = Date.now();
-            return existing.wallet;
-        }
+    // internal: open from disk or create. caller already holds the lock.
+    async _open(merchant) {
+        const cached = this.cache.get(merchant.id);
+        if (cached) { cached.lastUsed = Date.now(); return cached.wallet; }
         ensureDir();
         const wpath = walletPathFor(merchant.id);
         const exists = fs.existsSync(wpath + '.keys');
@@ -106,32 +128,35 @@ class WalletPool {
         throw lastErr || new Error('no daemon reachable');
     }
 
-    // derive the next subaddress index for the merchant from the wallet's own
-    // accounting (the wallet tracks indices in its persisted keys file). this
-    // guarantees no collision across server restarts.
+    // derive the next subaddress index. serialized per merchant.
     async nextSubaddress(merchant) {
-        const wallet = await this.getOrOpen(merchant);
-        // monero-ts createSubaddress returns a new subaddress at the next index
-        const sub = await wallet.createSubaddress(0);
-        const address = sub.getAddress();
-        const index = sub.getIndex();
-        await wallet.save();
-        return { address, index };
+        return this._lockFor(merchant.id)(async () => {
+            const wallet = await this._open(merchant);
+            const sub = await wallet.createSubaddress(0);
+            const address = sub.getAddress();
+            const index = sub.getIndex();
+            await wallet.save();
+            return { address, index };
+        });
     }
 
     async syncAndSave(merchant) {
-        const wallet = await this.getOrOpen(merchant);
-        await wallet.sync();
-        await wallet.save();
-        return wallet;
+        return this._lockFor(merchant.id)(async () => {
+            const wallet = await this._open(merchant);
+            await wallet.sync();
+            await wallet.save();
+            return wallet;
+        });
     }
 
     async incomingTransfersForIndex(merchant, subaddressIndex) {
-        const wallet = await this.getOrOpen(merchant);
-        return wallet.getTransfers({
-            accountIndex: 0,
-            subaddressIndex,
-            isIncoming: true,
+        return this._lockFor(merchant.id)(async () => {
+            const wallet = await this._open(merchant);
+            return wallet.getTransfers({
+                accountIndex: 0,
+                subaddressIndex,
+                isIncoming: true,
+            });
         });
     }
 }

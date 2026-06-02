@@ -13,6 +13,7 @@ const {
     generateWebhookSecret, signWebhook,
     apiKeyAuth,
 } = require('./auth');
+const { pool: walletPool } = require('./wallet_scanner');
 
 const ORDER_TTL_SECONDS = 30 * 60;        // 30 min to pay
 const WEBHOOK_MAX_ATTEMPTS = 8;            // ~10 hours with exponential backoff
@@ -192,7 +193,12 @@ function mountPayRoutes(app, deps) {
     });
 
     // ── PUBLIC API v1 (Bearer API key) ────────────────────────────────────
-    // POST /pay/v1/orders — create a payment request
+    // POST /pay/v1/orders — create a payment request.
+    //
+    // generates a fresh subaddress under the merchant's view-only wallet so
+    // each order has its own deposit address. that lets the scanner attribute
+    // arrivals to a specific order even when two orders share the same XMR
+    // amount. requires merchant.monero_address + merchant.private_view_key_enc.
     app.post('/pay/v1/orders', merchantAuth, async (req, res) => {
         try {
             const { amount_xmr, external_order_id, redirect_url, metadata } = req.body || {};
@@ -202,20 +208,22 @@ function mountPayRoutes(app, deps) {
             if (!req.merchant.monero_address) {
                 return res.status(400).json({ error: 'merchant has no Monero address configured. Visit the dashboard.' });
             }
-            // Use the same monero_monitor that powers store_orders. Subaddress per order
-            // means we can detect arrivals and route confirmations cleanly.
-            let subaddress = req.merchant.monero_address;
-            let subaddressIndex = null;
+            if (!req.merchant.private_view_key_enc) {
+                return res.status(400).json({ error: 'merchant has no view key configured. Visit the dashboard.' });
+            }
+
+            // derive a fresh subaddress for this order from the merchant's wallet.
+            // the WalletPool persists the index in the wallet keys file so we can
+            // never collide across restarts.
+            let subaddress, subaddressIndex;
             try {
-                if (moneroMonitor && typeof moneroMonitor.getOrCreateSubaddress === 'function') {
-                    // Re-using the dev-fund wallet here would be wrong: we need ONE wallet per
-                    // merchant. Phase 1 hosts the merchant's payout address directly as the
-                    // payment address — buyer sends straight to the merchant. Trade-off:
-                    // no per-order subaddress on hosted side. Phase 2 will spin per-merchant
-                    // wallet-rpc using merchant.private_view_key_enc.
-                    subaddress = req.merchant.monero_address;
-                }
-            } catch { /* fall back to flat address */ }
+                const result = await walletPool.nextSubaddress(req.merchant);
+                subaddress = result.address;
+                subaddressIndex = result.index;
+            } catch (walletErr) {
+                logError('PAY_SUBADDRESS', walletErr, { merchantId: req.merchant.id });
+                return res.status(503).json({ error: 'Failed to derive payment address. Try again in a moment.' });
+            }
 
             const orderId = newId('ord');
             const expiresAt = new Date(Date.now() + ORDER_TTL_SECONDS * 1000).toISOString();
@@ -229,10 +237,11 @@ function mountPayRoutes(app, deps) {
             res.json({
                 order_id: orderId,
                 payment_address: subaddress,
+                payment_subaddress_index: subaddressIndex,
                 amount_xmr,
                 status: 'pending',
                 expires_at: expiresAt,
-                checkout_url: `https://money.goxmr.click/checkout/${orderId}`,
+                checkout_url: `https://goxmr.click/pay/checkout/${orderId}`,
                 qr_data: `monero:${subaddress}?tx_amount=${amount_xmr}`,
             });
         } catch (err) {

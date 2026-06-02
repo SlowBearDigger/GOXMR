@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Zap, Shield, Check, Copy, RefreshCw, Loader2, QrCode } from 'lucide-react';
 import QRCodeStyling from 'qr-code-styling';
+import { showToast } from './Toast';
 
 interface PremiumUpgradeCardProps {
     isPremium: boolean;
@@ -144,7 +145,7 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                                             }
                                             try {
                                                 const token = localStorage.getItem('goxmr_token');
-                                                await fetch('/api/me/premium/check', {
+                                                const res = await fetch('/api/me/premium/check', {
                                                     method: 'POST',
                                                     headers: {
                                                         'Authorization': `Bearer ${token}`,
@@ -152,8 +153,25 @@ export const PremiumUpgradeCard: React.FC<PremiumUpgradeCardProps> = ({
                                                     },
                                                     body: JSON.stringify({ txid: txidInput.trim() || undefined })
                                                 });
+                                                const data = await res.json().catch(() => ({}));
+                                                // map server status → toast severity. don't claim success when
+                                                // the tx is still waiting for confirmations or is missing.
+                                                const status = data.status || (data.isPremium ? 'activated' : 'unknown');
+                                                const msg = data.message || data.error || 'Scan complete.';
+                                                if (status === 'activated') {
+                                                    showToast(msg, 'success', 5000);
+                                                } else if (status === 'pending' || status === 'scanning') {
+                                                    showToast(msg, 'info', 5000);
+                                                } else if (status === 'not_found') {
+                                                    showToast(msg, 'warning', 6000);
+                                                } else {
+                                                    showToast(msg, 'error', 5000);
+                                                }
                                                 if (onRefresh) onRefresh();
-                                            } catch (e) { console.error(e); }
+                                            } catch (e: any) {
+                                                console.error(e);
+                                                showToast(e?.message || 'Network error during scan', 'error');
+                                            }
                                             if (btn) {
                                                 btn.innerHTML = 'FORCE PAYMENT SCAN';
                                                 btn.removeAttribute('disabled');

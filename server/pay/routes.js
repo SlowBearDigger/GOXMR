@@ -14,6 +14,7 @@ const {
     apiKeyAuth,
 } = require('./auth');
 const { pool: walletPool } = require('./wallet_scanner');
+const { nodePool } = require('../monero/nodePool');
 
 const ORDER_TTL_SECONDS = 30 * 60;        // 30 min to pay
 const WEBHOOK_MAX_ATTEMPTS = 8;            // ~10 hours with exponential backoff
@@ -363,6 +364,16 @@ function mountPayRoutes(app, deps) {
                 url: r.self_host_url || null,
             })) });
         } catch (err) { res.status(500).json({ error: 'Server error' }); }
+    });
+
+    // GET /pay/v1/nodes — browser-reachable monerod endpoints (healthy, https,
+    // CORS-capable) for the client-side WASM scanner to dial directly. public:
+    // it only lists nodes a browser could reach anyway. an empty list is a valid
+    // answer (no CORS node healthy right now) — the client falls back to hosted
+    // polling rather than scanning locally.
+    app.get('/pay/v1/nodes', (req, res) => {
+        res.set('Cache-Control', 'public, max-age=60');
+        res.json({ nodes: nodePool.corsNodes() });
     });
 }
 

@@ -11,7 +11,7 @@ const {
     generateApiKey, hashApiKey, maskApiKey,
     hashPassword, verifyPassword,
     generateWebhookSecret, signWebhook,
-    apiKeyAuth,
+    apiKeyAuth, isValidSigningPubkey,
 } = require('./auth');
 const { pool: walletPool } = require('./wallet_scanner');
 const { nodePool } = require('../monero/nodePool');
@@ -223,7 +223,7 @@ function mountPayRoutes(app, deps) {
     app.get('/pay/admin/me', merchantJwt, async (req, res) => {
         try {
             const m = await dbGet(
-                "SELECT id, email, business_name, monero_address, restore_height, webhook_url, is_testnet, opt_in_directory, self_host_url, created_at, api_key_prefix FROM pay_merchants WHERE id = ?",
+                "SELECT id, email, business_name, monero_address, restore_height, webhook_url, is_testnet, opt_in_directory, self_host_url, scan_mode, signing_pubkey, created_at, api_key_prefix FROM pay_merchants WHERE id = ?",
                 [req.merchantId]
             );
             if (!m) return res.status(404).json({ error: 'merchant not found' });
@@ -233,7 +233,7 @@ function mountPayRoutes(app, deps) {
 
     app.put('/pay/admin/me', merchantJwt, async (req, res) => {
         try {
-            const allow = ['business_name', 'monero_address', 'private_view_key_enc', 'restore_height', 'webhook_url', 'opt_in_directory', 'self_host_url'];
+            const allow = ['business_name', 'monero_address', 'private_view_key_enc', 'restore_height', 'webhook_url', 'opt_in_directory', 'self_host_url', 'scan_mode', 'signing_pubkey'];
             // boundary validation: reject obvious garbage at the API instead of
             // letting monero-ts throw inside the scanner later.
             if ('monero_address' in req.body && req.body.monero_address && !isValidMoneroAddress(req.body.monero_address)) {
@@ -244,6 +244,12 @@ function mountPayRoutes(app, deps) {
             }
             if ('webhook_url' in req.body && req.body.webhook_url && !/^https:\/\/[^\s]+$/i.test(req.body.webhook_url)) {
                 return res.status(400).json({ error: 'webhook_url must be an https URL' });
+            }
+            if ('signing_pubkey' in req.body && req.body.signing_pubkey && !isValidSigningPubkey(req.body.signing_pubkey)) {
+                return res.status(400).json({ error: 'signing_pubkey must be a 32-byte Ed25519 key (64 hex chars)' });
+            }
+            if ('scan_mode' in req.body && req.body.scan_mode != null && req.body.scan_mode !== '' && !['hosted', 'client'].includes(req.body.scan_mode)) {
+                return res.status(400).json({ error: "scan_mode must be 'hosted' or 'client'" });
             }
             const updates = [];
             const params = [];

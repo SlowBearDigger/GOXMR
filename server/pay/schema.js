@@ -38,9 +38,16 @@ function applyPaySchema(db) {
             is_testnet INTEGER DEFAULT 1,
             opt_in_directory INTEGER DEFAULT 0,
             self_host_url TEXT,
+            scan_mode TEXT DEFAULT 'hosted',
+            signing_pubkey TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             notes TEXT
         )`);
+        // additive migration for dbs created before scan_mode/signing_pubkey. sqlite
+        // has no "ADD COLUMN IF NOT EXISTS", so run them and ignore the duplicate-
+        // column error on an already-migrated db.
+        db.run(`ALTER TABLE pay_merchants ADD COLUMN scan_mode TEXT DEFAULT 'hosted'`, () => {});
+        db.run(`ALTER TABLE pay_merchants ADD COLUMN signing_pubkey TEXT`, () => {});
 
         db.run(`CREATE TABLE IF NOT EXISTS pay_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

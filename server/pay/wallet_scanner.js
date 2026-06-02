@@ -15,15 +15,60 @@ const MIN_CONFIRMATIONS = 1;
 
 const pool = new WalletPool();
 
+// in monero-ts a Transfer is a leaf that points at its parent Tx via getTx();
+// confirmation count and block height live on the Tx, not the Transfer. reading
+// confs from the Transfer object directly returns 0 forever, so paid orders
+// would never cross MIN_CONFIRMATIONS and stay pending. mirror the fix already
+// applied to monero_monitor._getSafeTransferData() — ask the Tx first, fall
+// back to the Transfer-level shape, and surface an isConfirmed boolean so the
+// caller can backfill via daemon height when neither path returns a number.
 function readTransfer(t) {
     try {
-        const atomic = t.getAmount ? t.getAmount() : t.amount;
-        const amount = parseFloat(atomic.toString()) / 1e12;
-        const confs = t.getNumConfirmations ? Number(t.getNumConfirmations()) : Number(t.numConfirmations || 0);
-        const txHash = t.getTx ? t.getTx().getHash() : (t.txHash || null);
-        return { amount, confs, txHash };
+        const tx = (t && typeof t.getTx === 'function') ? t.getTx() : null;
+
+        const atomic = (typeof t.getAmount === 'function') ? t.getAmount() : t.amount;
+        const amount = parseFloat((atomic ?? 0).toString()) / 1e12;
+
+        const readConfs = (obj) => {
+            if (!obj) return undefined;
+            if (typeof obj.getNumConfirmations === 'function') return obj.getNumConfirmations();
+            if (typeof obj.getConfirmations === 'function') return obj.getConfirmations();
+            if (obj.numConfirmations !== undefined) return obj.numConfirmations;
+            if (obj.confirmations !== undefined) return obj.confirmations;
+            return undefined;
+        };
+        const readHeight = (obj) => {
+            if (!obj) return undefined;
+            if (typeof obj.getHeight === 'function') return obj.getHeight();
+            if (obj.height !== undefined) return obj.height;
+            return undefined;
+        };
+        const readIsConfirmed = (obj) => {
+            if (!obj) return undefined;
+            if (typeof obj.getIsConfirmed === 'function') return !!obj.getIsConfirmed();
+            if (typeof obj.isConfirmed === 'function') return !!obj.isConfirmed();
+            if (obj.isConfirmed !== undefined) return !!obj.isConfirmed;
+            return undefined;
+        };
+
+        const confsRaw = readConfs(tx) ?? readConfs(t);
+        let confs = Number(confsRaw?.toString?.() ?? confsRaw ?? 0) || 0;
+
+        const heightRaw = readHeight(tx) ?? readHeight(t);
+        const height = Number(heightRaw?.toString?.() ?? heightRaw ?? 0) || 0;
+
+        const isConfirmed = readIsConfirmed(tx) ?? readIsConfirmed(t) ?? false;
+        if (confs === 0 && isConfirmed) confs = 1;
+
+        let txHash = null;
+        if (tx && typeof tx.getHash === 'function') txHash = tx.getHash();
+        if (!txHash && typeof t.getTxHash === 'function') txHash = t.getTxHash();
+        if (!txHash && typeof t.getHash === 'function') txHash = t.getHash();
+        if (!txHash && t.txHash) txHash = t.txHash;
+
+        return { amount, confs, txHash, height, isConfirmed };
     } catch {
-        return { amount: 0, confs: 0, txHash: null };
+        return { amount: 0, confs: 0, txHash: null, height: 0, isConfirmed: false };
     }
 }
 
@@ -40,7 +85,30 @@ async function scanOneMerchant({ merchant, dbAll, dbRun, dbGet, queueWebhook, lo
 
     // sync once per merchant per cycle, then loop orders against the in-memory
     // wallet state. avoids 1 sync per pending order.
-    await pool.syncAndSave(merchant);
+    const wallet = await pool.syncAndSave(merchant);
+
+    // daemon height (blockchain tip) — used as canonical reference when neither
+    // the Tx nor the Transfer expose a numeric confirmation count but we do know
+    // the tx height. mirrors the daemon-height path in monero_monitor.
+    let referenceHeight = 0;
+    try {
+        if (wallet && typeof wallet.getDaemonHeight === 'function') {
+            referenceHeight = Number((await wallet.getDaemonHeight())?.toString?.() ?? 0) || 0;
+        }
+    } catch { /* non-fatal */ }
+    if (!referenceHeight && wallet) {
+        try {
+            if (typeof wallet.getHeight === 'function') {
+                referenceHeight = Number((await wallet.getHeight())?.toString?.() ?? 0) || 0;
+            }
+        } catch { /* non-fatal */ }
+    }
+
+    const effectiveConfs = (r) => {
+        if (r.confs > 0) return r.confs;
+        if (r.height > 0 && referenceHeight > r.height) return referenceHeight - r.height + 1;
+        return 0;
+    };
 
     let matched = 0;
     for (const order of pending) {
@@ -48,18 +116,19 @@ async function scanOneMerchant({ merchant, dbAll, dbRun, dbGet, queueWebhook, lo
             const transfers = await pool.incomingTransfersForIndex(merchant, order.payment_subaddress_index);
             const hit = transfers.find(t => {
                 const r = readTransfer(t);
-                return r.confs >= MIN_CONFIRMATIONS &&
+                return effectiveConfs(r) >= MIN_CONFIRMATIONS &&
                        Math.abs(r.amount - order.amount_xmr) <= 0.000001;
             });
             if (!hit) continue;
             const r = readTransfer(hit);
+            const finalConfs = effectiveConfs(r);
             const update = await dbRun(
                 "UPDATE pay_orders SET status = 'paid', tx_hash = ?, confirmations = ?, detected_at = datetime('now'), confirmed_at = datetime('now') WHERE id = ? AND status = 'pending'",
-                [r.txHash, r.confs, order.id]
+                [r.txHash, finalConfs, order.id]
             );
             if (update && update.changes > 0) {
                 matched++;
-                console.log(`[PAY-SCAN] merchant=${merchant.id} order=${order.order_id} paid: ${r.amount} XMR confs=${r.confs} tx=${r.txHash}`);
+                console.log(`[PAY-SCAN] merchant=${merchant.id} order=${order.order_id} paid: ${r.amount} XMR confs=${r.confs} (effective ${finalConfs}, height=${r.height}, refHeight=${referenceHeight}, isConfirmed=${r.isConfirmed}) tx=${r.txHash}`);
                 try {
                     if (queueWebhook) await queueWebhook({ dbGet, dbRun }, order.id, 'order.paid');
                 } catch (whErr) {

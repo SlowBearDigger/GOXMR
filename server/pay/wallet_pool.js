@@ -10,10 +10,24 @@
 const monerojs = require('monero-ts');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const PAY_WALLET_DIR = path.resolve('./wallet_data/pay');
 const WALLET_IDLE_TTL_MS = 5 * 60 * 1000;        // close if untouched for 5 min
 const REAP_INTERVAL_MS = 60 * 1000;              // sweep idle wallets every 1 min
+
+// derive a per-merchant wallet password from the server secret + merchant id.
+// the wallet file on disk is encrypted with this; even if someone reads the
+// wallet_data dir they need JWT_SECRET to unlock it. on first open after this
+// helper landed, wallets written with the old empty password are migrated
+// transparently via _openWithMigration() — we try the derived password first,
+// fall back to the empty one, and on success rewrite the keys with the new
+// password by saving immediately.
+function walletPasswordFor(merchantId) {
+    const secret = process.env.JWT_SECRET || '';
+    if (!secret) return ''; // no secret → degrade to empty rather than locking forever
+    return crypto.createHash('sha256').update(`pay-wallet:${secret}:${merchantId}`).digest('hex');
+}
 
 function ensureDir() {
     if (!fs.existsSync(PAY_WALLET_DIR)) {
@@ -88,28 +102,51 @@ class WalletPool {
     }
 
     // internal: open from disk or create. caller already holds the lock.
+    // password handling:
+    //   - new wallets are created with walletPasswordFor(merchantId) — derived
+    //     from JWT_SECRET so the on-disk file can't be opened without the server secret
+    //   - existing wallets created before this change used password '' — we try
+    //     the derived password first, fall back to '' on auth failure, and if the
+    //     fallback worked we re-save with the new password to migrate transparently
     async _open(merchant) {
         const cached = this.cache.get(merchant.id);
         if (cached) { cached.lastUsed = Date.now(); return cached.wallet; }
         ensureDir();
         const wpath = walletPathFor(merchant.id);
         const exists = fs.existsSync(wpath + '.keys');
+        const targetPassword = walletPasswordFor(merchant.id);
         let lastErr = null;
         for (const daemon of this.daemons) {
             try {
                 let wallet;
+                let needsRekey = false;
                 if (exists) {
-                    wallet = await monerojs.openWalletFull({
-                        path: wpath,
-                        password: '',
-                        networkType: 'mainnet',
-                    });
+                    // try derived password first, fall back to empty for legacy wallets
+                    try {
+                        wallet = await monerojs.openWalletFull({
+                            path: wpath,
+                            password: targetPassword,
+                            networkType: 'mainnet',
+                        });
+                    } catch (primaryErr) {
+                        try {
+                            wallet = await monerojs.openWalletFull({
+                                path: wpath,
+                                password: '',
+                                networkType: 'mainnet',
+                            });
+                            needsRekey = !!targetPassword;
+                            if (needsRekey) console.log(`[PAY-POOL] migrating wallet merchant=${merchant.id} to derived password`);
+                        } catch (legacyErr) {
+                            throw primaryErr; // surface the more informative error
+                        }
+                    }
                     await wallet.setDaemonConnection(daemon);
                 } else {
                     const restoreHeight = Number(merchant.restore_height) || 3300000;
                     wallet = await monerojs.createWalletFull({
                         path: wpath,
-                        password: '',
+                        password: targetPassword,
                         networkType: 'mainnet',
                         serverUri: daemon,
                         primaryAddress: merchant.monero_address,
@@ -117,8 +154,22 @@ class WalletPool {
                         restoreHeight,
                     });
                 }
+                // if we opened a legacy '' wallet under a target password we want the
+                // re-encrypted version on disk. monero-ts re-encrypts on save() when
+                // the wallet was opened with one password and we changed it; the
+                // simplest portable path is to use changePassword() then save().
+                if (needsRekey) {
+                    try {
+                        if (typeof wallet.changePassword === 'function') {
+                            await wallet.changePassword('', targetPassword);
+                        }
+                        await wallet.save();
+                    } catch (rekeyErr) {
+                        console.warn(`[PAY-POOL] rekey failed merchant=${merchant.id}: ${rekeyErr.message} — wallet still functional with old password`);
+                    }
+                }
                 this.cache.set(merchant.id, { wallet, lastUsed: Date.now() });
-                console.log(`[PAY-POOL] opened wallet merchant=${merchant.id} via ${daemon}`);
+                console.log(`[PAY-POOL] opened wallet merchant=${merchant.id} via ${daemon}${needsRekey ? ' (migrated)' : ''}`);
                 return wallet;
             } catch (err) {
                 lastErr = err;

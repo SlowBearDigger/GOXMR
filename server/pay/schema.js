@@ -4,6 +4,24 @@
 
 function applyPaySchema(db) {
     db.serialize(() => {
+        // invite codes — phase-1 access control. only someone with a valid code
+        // can register a merchant while PAY_PUBLIC=0. codes are single-use, can
+        // carry a label so the operator remembers who they were handed to, and
+        // can optionally expire. revoked codes flip is_active=0 instead of being
+        // deleted so audit history survives.
+        db.run(`CREATE TABLE IF NOT EXISTS pay_invites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            label TEXT,
+            used_by_merchant_id INTEGER,
+            used_at DATETIME,
+            expires_at DATETIME,
+            is_active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (used_by_merchant_id) REFERENCES pay_merchants(id) ON DELETE SET NULL
+        )`);
+        db.run('CREATE INDEX IF NOT EXISTS idx_pay_invites_active ON pay_invites(is_active, used_at)');
+
         db.run(`CREATE TABLE IF NOT EXISTS pay_merchants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,

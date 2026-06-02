@@ -11,6 +11,7 @@ export const PaySignupPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [businessName, setBusinessName] = useState('');
+    const [inviteCode, setInviteCode] = useState('');
     const [acceptTerms, setAcceptTerms] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -19,12 +20,13 @@ export const PaySignupPage: React.FC = () => {
         setError('');
         if (password.length < 12) { setError('Password must be at least 12 characters'); return; }
         if (!acceptTerms) { setError('You must accept the Terms of Use to continue'); return; }
+        if (!inviteCode.trim()) { setError('Invite code required — Pay is in private beta. Reach out to the GoXMR team for one.'); return; }
         setLoading(true);
         try {
             const r = await fetch('/pay/admin/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, business_name: businessName || undefined }),
+                body: JSON.stringify({ email, password, business_name: businessName || undefined, invite_code: inviteCode.trim() }),
             });
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || 'Signup failed');
@@ -41,9 +43,16 @@ export const PaySignupPage: React.FC = () => {
         <PayLayout>
             <div className="max-w-md mx-auto px-4 py-12">
                 <h1 className="font-mono font-black uppercase text-3xl tracking-tighter mb-2 italic">Start accepting XMR</h1>
-                <p className="font-mono text-xs text-gray-500 dark:text-gray-400 mb-6">No KYC. No verification. Just an email and a password.</p>
+                <p className="font-mono text-xs text-gray-500 dark:text-gray-400 mb-2">No KYC. No verification. Just an email and a password.</p>
+                <div className="border-2 border-monero-orange bg-monero-orange/10 p-3 mb-6 font-mono text-[11px] leading-relaxed">
+                    <span className="font-black uppercase tracking-wider">Private beta</span> — signup requires an invite code. Reach out to <span className="text-monero-orange font-bold">@SlowBearDigger</span> for one while we harden the gateway.
+                </div>
 
                 <div className="space-y-3">
+                    <Field label="Invite Code" hint="Provided by the GoXMR team during the private beta">
+                        <input type="text" value={inviteCode} onChange={e => setInviteCode(e.target.value)} placeholder="paste your code"
+                            className="w-full border-2 border-monero-orange bg-white dark:bg-zinc-900 p-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-monero-orange outline-none" />
+                    </Field>
                     <Field label="Email">
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
                             className="w-full border-2 border-black dark:border-white bg-white dark:bg-zinc-900 p-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-monero-orange outline-none" />
@@ -71,7 +80,7 @@ export const PaySignupPage: React.FC = () => {
 
                     {error && <p className="text-red-500 text-xs font-mono">{error}</p>}
 
-                    <button onClick={submit} disabled={loading || !email || password.length < 12 || !acceptTerms}
+                    <button onClick={submit} disabled={loading || !email || password.length < 12 || !acceptTerms || !inviteCode.trim()}
                         className="w-full bg-black dark:bg-white text-white dark:text-black font-mono text-sm font-black uppercase py-3 border-2 border-black dark:border-white shadow-[4px_4px_0px_0px_rgba(242,104,34,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                         {loading ? <Loader2 size={14} className="animate-spin" /> : <>Create Account <ArrowRight size={14} /></>}
                     </button>

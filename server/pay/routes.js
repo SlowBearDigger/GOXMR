@@ -48,8 +48,27 @@ function isValidViewKey(k) {
 }
 
 function mountPayRoutes(app, deps) {
-    const { dbGet, dbAll, dbRun, moneroMonitor, logError, JWT_SECRET, redactIp } = deps;
+    const { dbGet, dbAll, dbRun, moneroMonitor, logError, JWT_SECRET, redactIp,
+            authLimiter, verifyAltcha } = deps;
     const merchantAuth = apiKeyAuth(dbGet);
+
+    // ── KILL SWITCH ────────────────────────────────────────────────────────
+    // Phase-1 access control: while PAY_PUBLIC !== '1' the gateway answers 404
+    // to everything under /pay/* unless the caller forwards a matching
+    // X-Pay-Beta-Token header (set PAY_BETA_TOKEN in env). This lets the
+    // server keep the code loaded so beta operators can poke it without
+    // exposing it to the world. The SPA pages live under the React Router so
+    // /pay/ in a browser still hits index.html — the gate here is the API.
+    const payPublic = process.env.PAY_PUBLIC === '1';
+    const betaToken = (process.env.PAY_BETA_TOKEN || '').trim();
+    const isBetaCaller = (req) => betaToken && req.get('X-Pay-Beta-Token') === betaToken;
+    app.use('/pay', (req, res, next) => {
+        // GET /pay/embed/pay.js needs to stay reachable for merchants who already
+        // dropped the script tag — block the API surface, not the static shim.
+        if (req.path === '/embed/pay.js' && req.method === 'GET') return next();
+        if (payPublic || isBetaCaller(req)) return next();
+        return res.status(404).json({ error: 'Not Found' });
+    });
 
     // ── PUBLIC EMBED (no auth) ──────────────────────────────────────────────
     // GET /pay/embed/pay.js — minified JS shim that data-attribute buttons
@@ -68,14 +87,41 @@ function mountPayRoutes(app, deps) {
     // GET /pay/checkout/:order_id — checkout HTML page rendered by the SPA
     // We hand off to the SPA which detects the path and shows the modal.
 
-    // ── MERCHANT REGISTRATION (Phase 1, simple email/password) ──────────────
-    app.post('/pay/admin/register', async (req, res) => {
+    // ── MERCHANT REGISTRATION (Phase 1, invite-only + altcha + rate-limit) ───
+    // Both authLimiter and verifyAltcha are injected from the host app so we
+    // reuse the exact same instances and counters as /api/login etc — one
+    // shared budget keeps abuse accounting honest across the auth surfaces.
+    // INVITE_REQUIRED defaults to true. While PAY_PUBLIC=0 the kill switch
+    // above already 404s the route to non-beta callers; this layer is the
+    // second wall so that even if PAY_PUBLIC is flipped, signups stay gated
+    // until invites are explicitly opened.
+    const inviteRequired = process.env.PAY_INVITE_REQUIRED !== '0';
+    const registerStack = [authLimiter, verifyAltcha].filter(Boolean);
+    app.post('/pay/admin/register', ...registerStack, async (req, res) => {
         try {
-            const { email, password, business_name } = req.body || {};
+            const { email, password, business_name, invite_code } = req.body || {};
             if (!email || !password) return res.status(400).json({ error: 'email and password required' });
             if (password.length < 12) return res.status(400).json({ error: 'password must be at least 12 chars' });
             // ReDoS-proof structural validator — same as server/index.js notification email check
             if (!isValidLooseEmailLocal(email)) return res.status(400).json({ error: 'invalid email' });
+
+            // invite code check. validates: exists, not revoked, not expired, not already used
+            let inviteRow = null;
+            if (inviteRequired) {
+                if (!invite_code || typeof invite_code !== 'string' || invite_code.length < 6) {
+                    return res.status(403).json({ error: 'invite_code required' });
+                }
+                inviteRow = await dbGet(
+                    "SELECT id, expires_at, is_active, used_at FROM pay_invites WHERE code = ?",
+                    [invite_code.trim()]
+                );
+                if (!inviteRow) return res.status(403).json({ error: 'invalid invite_code' });
+                if (!inviteRow.is_active) return res.status(403).json({ error: 'invite_code revoked' });
+                if (inviteRow.used_at) return res.status(403).json({ error: 'invite_code already used' });
+                if (inviteRow.expires_at && new Date(inviteRow.expires_at) < new Date()) {
+                    return res.status(403).json({ error: 'invite_code expired' });
+                }
+            }
 
             const existing = await dbGet('SELECT id FROM pay_merchants WHERE LOWER(email) = LOWER(?)', [email]);
             if (existing) return res.status(409).json({ error: 'email already registered' });
@@ -85,6 +131,21 @@ function mountPayRoutes(app, deps) {
                 'INSERT INTO pay_merchants (email, password_hash, business_name) VALUES (?, ?, ?)',
                 [email.toLowerCase(), pwHash, (business_name || '').slice(0, 100)]
             );
+
+            // mark invite consumed — best effort, failure here doesn't void the
+            // merchant account (rare race) but is logged so operator can revoke
+            // manually if abuse pattern shows up.
+            if (inviteRow) {
+                try {
+                    await dbRun(
+                        "UPDATE pay_invites SET used_by_merchant_id = ?, used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_at IS NULL",
+                        [result.lastID, inviteRow.id]
+                    );
+                } catch (markErr) {
+                    logError('PAY_INVITE_MARK', markErr, { inviteId: inviteRow.id, merchantId: result.lastID });
+                }
+            }
+
             const token = jwt.sign({ merchantId: result.lastID, email }, JWT_SECRET, { expiresIn: '7d' });
             res.json({ token, merchant_id: result.lastID });
         } catch (err) {
@@ -93,7 +154,8 @@ function mountPayRoutes(app, deps) {
         }
     });
 
-    app.post('/pay/admin/login', async (req, res) => {
+    const loginStack = [authLimiter, verifyAltcha].filter(Boolean);
+    app.post('/pay/admin/login', ...loginStack, async (req, res) => {
         try {
             const { email, password } = req.body || {};
             if (!email || !password) return res.status(400).json({ error: 'email and password required' });
@@ -101,6 +163,7 @@ function mountPayRoutes(app, deps) {
             if (!merchant) return res.status(401).json({ error: 'Invalid credentials' });
             const ok = await verifyPassword(password, merchant.password_hash);
             if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+            if (!merchant.is_active) return res.status(403).json({ error: 'Account disabled' });
             const token = jwt.sign({ merchantId: merchant.id, email: merchant.email }, JWT_SECRET, { expiresIn: '7d' });
             res.json({ token, merchant_id: merchant.id });
         } catch (err) {

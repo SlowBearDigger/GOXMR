@@ -236,6 +236,25 @@ class MoneroMonitor {
             if (pendingUsers.length === 0) return;
             console.log(`[MONERO] Scanning for ${pendingUsers.length} pending users...`);
 
+            // daemon height (blockchain tip) — used as the canonical reference for confirmation
+            // calc when the Tx/Transfer objects don't expose a numeric count. Falls back to the
+            // wallet's own synced height if the daemon call fails. The single-tx flow in
+            // checkPaymentByTxid uses the same daemon path; we mirror it here so the scheduled
+            // sweep and the manual fast-track follow identical activation rules.
+            let referenceHeight = 0;
+            try {
+                if (typeof this.wallet.getDaemonHeight === 'function') {
+                    referenceHeight = Number((await this.wallet.getDaemonHeight())?.toString?.() ?? 0) || 0;
+                }
+            } catch { /* non-fatal */ }
+            if (!referenceHeight) {
+                try {
+                    if (typeof this.wallet.getHeight === 'function') {
+                        referenceHeight = Number((await this.wallet.getHeight())?.toString?.() ?? 0) || 0;
+                    }
+                } catch { /* non-fatal */ }
+            }
+
             // Check payments
             for (const user of pendingUsers) {
                 const transfers = await this.wallet.getTransfers({
@@ -249,8 +268,13 @@ class MoneroMonitor {
                 const MIN_CONFIRMATIONS = 1;
                 const confirmedTransfer = transfers.find(t => {
                     const data = this._getSafeTransferData(t);
-                    console.log(`   -> Tx: ${data.txid}, Confs: ${data.confs}, Amount: ${data.amount} XMR`);
-                    return data.amount >= MIN_PAYMENT_AMOUNT && data.confs >= MIN_CONFIRMATIONS;
+                    // backfill confs from referenceHeight delta when the parsers couldn't read a number
+                    let effectiveConfs = data.confs;
+                    if (effectiveConfs === 0 && data.height > 0 && referenceHeight > data.height) {
+                        effectiveConfs = referenceHeight - data.height + 1;
+                    }
+                    console.log(`   -> Tx: ${data.txid}, Confs: ${data.confs} (effective ${effectiveConfs}), Amount: ${data.amount} XMR, Height: ${data.height}, RefHeight: ${referenceHeight}, isConfirmed: ${data.isConfirmed}`);
+                    return data.amount >= MIN_PAYMENT_AMOUNT && effectiveConfs >= MIN_CONFIRMATIONS;
                 });
 
                 if (confirmedTransfer) {
@@ -265,49 +289,95 @@ class MoneroMonitor {
         }
     }
 
-    // Helper to safely extract data from different monero-ts transfer object structures
+    // Helper to safely extract data from different monero-ts transfer object structures.
+    //
+    // The bug we were hitting: in monero-ts, a Transfer is a leaf object that points at
+    // its parent Tx via getTx(). Confirmation count and height live on the Tx, NOT on
+    // the Transfer itself. The old code tried t.getNumConfirmations() directly, which
+    // doesn't exist, fell through every alternative, and landed on confs=0 forever —
+    // so paid users with TXs minutes deep in the chain still read as "0 confirmations"
+    // and never had is_premium flipped.
+    //
+    // Now we go to the Tx first (where the API actually lives) and only fall back to
+    // the Transfer-level fields if that path is unavailable.
     _getSafeTransferData(t) {
         let txid = 'unknown';
         let amount = 0;
         let confs = 0;
         let height = 0;
+        let isConfirmed = false;
 
         try {
-            // 1. Extract TXID
-            if (typeof t.getTxHash === 'function') txid = t.getTxHash();
-            else if (typeof t.getHash === 'function') txid = t.getHash();
-            else if (t.getTx && typeof t.getTx === 'function') {
-                const tx = t.getTx();
-                if (tx && typeof tx.getHash === 'function') txid = tx.getHash();
+            // resolve the parent Tx if the wrapper exposes one — that's where confs / height / hash live in monero-ts
+            const tx = (t && typeof t.getTx === 'function') ? t.getTx() : null;
+
+            // 1. txid: prefer the Tx hash; fall back to Transfer-level getters
+            if (tx) {
+                if (typeof tx.getHash === 'function') txid = tx.getHash();
+                else if (typeof tx.getTxHash === 'function') txid = tx.getTxHash();
+            }
+            if (txid === 'unknown' || !txid) {
+                if (typeof t.getTxHash === 'function') txid = t.getTxHash();
+                else if (typeof t.getHash === 'function') txid = t.getHash();
             }
 
-            // 2. Extract Amount (handle BigInt/BigInteger)
+            // 2. amount (handle BigInt / BigInteger)
             let rawAmount = 0;
             if (typeof t.getAmount === 'function') rawAmount = t.getAmount();
             else if (t.amount !== undefined) rawAmount = t.amount;
-
             amount = parseFloat(rawAmount.toString()) / 1e12;
 
-            // 3. Extract Confirmations & Height
-            if (typeof t.getNumConfirmations === 'function') confs = t.getNumConfirmations();
-            else if (typeof t.getConfirmations === 'function') confs = t.getConfirmations();
-            else if (t.numConfirmations !== undefined) confs = t.numConfirmations;
-            else if (t.confirmations !== undefined) confs = t.confirmations;
+            // 3. confirmations + height: ask the Tx first (the correct location), then fall back
+            const readConfs = (obj) => {
+                if (!obj) return undefined;
+                if (typeof obj.getNumConfirmations === 'function') return obj.getNumConfirmations();
+                if (typeof obj.getConfirmations === 'function') return obj.getConfirmations();
+                if (obj.numConfirmations !== undefined) return obj.numConfirmations;
+                if (obj.confirmations !== undefined) return obj.confirmations;
+                return undefined;
+            };
+            const readHeight = (obj) => {
+                if (!obj) return undefined;
+                if (typeof obj.getHeight === 'function') return obj.getHeight();
+                if (obj.height !== undefined) return obj.height;
+                return undefined;
+            };
+            const readIsConfirmed = (obj) => {
+                if (!obj) return undefined;
+                if (typeof obj.getIsConfirmed === 'function') return !!obj.getIsConfirmed();
+                if (typeof obj.isConfirmed === 'function') return !!obj.isConfirmed();
+                if (obj.isConfirmed !== undefined) return !!obj.isConfirmed;
+                return undefined;
+            };
 
-            if (typeof t.getHeight === 'function') height = t.getHeight();
-            else if (t.height !== undefined) height = t.height;
+            const confsFromTx = readConfs(tx);
+            const confsFromTransfer = readConfs(t);
+            // tx-level wins; transfer-level only if tx didn't provide anything
+            let parsedConfs = confsFromTx !== undefined ? confsFromTx : confsFromTransfer;
+            confs = Number(parsedConfs?.toString?.() ?? parsedConfs ?? 0) || 0;
 
-            // Fallback: Check isConfirmed boolean
-            if (confs === 0 || confs === undefined) {
-                if (typeof t.isConfirmed === 'function' && t.isConfirmed()) confs = 1;
-                else if (t.isConfirmed === true) confs = 1;
-            }
+            const heightFromTx = readHeight(tx);
+            const heightFromTransfer = readHeight(t);
+            let parsedHeight = heightFromTx !== undefined ? heightFromTx : heightFromTransfer;
+            height = Number(parsedHeight?.toString?.() ?? parsedHeight ?? 0) || 0;
 
+            const confirmedFromTx = readIsConfirmed(tx);
+            const confirmedFromTransfer = readIsConfirmed(t);
+            isConfirmed = confirmedFromTx ?? confirmedFromTransfer ?? false;
+
+            // last-resort backfill: if we know the tx is on-chain but couldn't read a
+            // numeric confs, count it as at least 1 so the activation threshold is reachable.
+            if (confs === 0 && isConfirmed) confs = 1;
+
+            // additional backfill: if we have the tx height AND the wallet's current
+            // height is reachable on `this`, compute confs from the delta. The wallet
+            // reference is on the parent monitor instance, not this helper, so a caller
+            // can layer this in if needed.
         } catch (e) {
             console.error("Error parsing transfer object:", e);
         }
 
-        return { txid, amount, confs, height };
+        return { txid, amount, confs, height, isConfirmed };
     }
 
     async checkPaymentByTxid(userId, txidInput) {

@@ -53,6 +53,16 @@ function mountPayRoutes(app, deps) {
             authLimiter, verifyAltcha } = deps;
     const merchantAuth = apiKeyAuth(dbGet);
 
+    // load the embed shim once and pin its SHA-384 so /pay/embed/integrity can
+    // hand merchants an SRI value that's provably the hash of the exact bytes we
+    // serve at /pay/embed/pay.js. recomputed only on restart (deploy-time).
+    const EMBED_PATH = path.join(__dirname, 'embed.js');
+    let EMBED_JS = null, EMBED_SRI = null;
+    try {
+        EMBED_JS = fs.readFileSync(EMBED_PATH);
+        EMBED_SRI = 'sha384-' + crypto.createHash('sha384').update(EMBED_JS).digest('base64');
+    } catch { /* shim missing → the embed endpoints below degrade gracefully */ }
+
     // ── KILL SWITCH ────────────────────────────────────────────────────────
     // Phase-1 access control: while PAY_PUBLIC !== '1' the gateway answers 404
     // to everything under /pay/* unless the caller forwards a matching
@@ -66,7 +76,7 @@ function mountPayRoutes(app, deps) {
     app.use('/pay', (req, res, next) => {
         // GET /pay/embed/pay.js needs to stay reachable for merchants who already
         // dropped the script tag — block the API surface, not the static shim.
-        if (req.path === '/embed/pay.js' && req.method === 'GET') return next();
+        if ((req.path === '/embed/pay.js' || req.path === '/embed/integrity') && req.method === 'GET') return next();
         if (payPublic || isBetaCaller(req)) return next();
         return res.status(404).json({ error: 'Not Found' });
     });
@@ -75,14 +85,37 @@ function mountPayRoutes(app, deps) {
     // GET /pay/embed/pay.js — minified JS shim that data-attribute buttons
     // become payment triggers. Cached aggressively.
     app.get('/pay/embed/pay.js', (req, res) => {
-        const jsPath = path.join(__dirname, 'embed.js');
-        if (!fs.existsSync(jsPath)) {
+        if (!EMBED_JS) {
             return res.status(503).type('application/javascript').send('// embed not built');
         }
         res.set('Content-Type', 'application/javascript; charset=utf-8');
         res.set('Cache-Control', 'public, max-age=300, s-maxage=600');
         res.set('X-GoXMR-Pay-Version', '1');
-        res.sendFile(jsPath);
+        // SRI on a cross-origin script requires the response to be CORS-eligible
+        // so merchants on their own domain can pin it with integrity+crossorigin.
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+        // serve the exact bytes EMBED_SRI was computed over (not a fresh disk
+        // read) so the pinned hash can never drift from what we actually send.
+        res.send(EMBED_JS);
+    });
+
+    // GET /pay/embed/integrity — SRI digest of the bytes above + a paste-ready
+    // <script> tag. public + CORS so a merchant can pin the shim without an
+    // account. a legacy snippet without integrity still works; it's just not
+    // tamper-evident.
+    app.get('/pay/embed/integrity', (req, res) => {
+        if (!EMBED_SRI) return res.status(503).json({ error: 'embed not built' });
+        const src = 'https://goxmr.click/pay/embed/pay.js';
+        res.set('Cache-Control', 'public, max-age=300');
+        res.set('Access-Control-Allow-Origin', '*');
+        res.json({
+            src,
+            algorithm: 'sha384',
+            integrity: EMBED_SRI,
+            version: 1,
+            snippet: `<script src="${src}" integrity="${EMBED_SRI}" crossorigin="anonymous"></script>`,
+        });
     });
 
     // GET /pay/checkout/:order_id — checkout HTML page rendered by the SPA

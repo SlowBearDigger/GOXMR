@@ -3004,10 +3004,16 @@ const { mountPayRoutes } = require('./pay/routes');
 const { startPaymentScanner, queueWebhook } = require('./pay/paymentScanner');
 const { startWalletScanner } = require('./pay/wallet_scanner');
 applyPaySchema(db);
-mountPayRoutes(app, { dbGet, dbAll, dbRun, moneroMonitor, logError, JWT_SECRET, redactIp });
+// pass authLimiter and verifyAltcha into the pay routes so /pay/admin/register
+// and /pay/admin/login share the same abuse-accounting middlewares as the main
+// app's /api/login flow. one shared budget keeps signup farming from getting a
+// fresh quota by switching surfaces.
+mountPayRoutes(app, { dbGet, dbAll, dbRun, moneroMonitor, logError, JWT_SECRET, redactIp, authLimiter, verifyAltcha });
 startPaymentScanner({ dbAll, dbRun, dbGet, logError });
 startWalletScanner({ dbAll, dbRun, dbGet, queueWebhook, logError });
-console.log('GoXMR Pay endpoints registered (/pay/*)');
+const payPublicFlag = process.env.PAY_PUBLIC === '1' ? 'public' : 'private (PAY_PUBLIC=0)';
+const inviteRequiredFlag = process.env.PAY_INVITE_REQUIRED !== '0' ? 'invite-only' : 'open signup';
+console.log(`GoXMR Pay endpoints registered (/pay/*) — ${payPublicFlag}, ${inviteRequiredFlag}`);
 
 // strict per-route limiter for the migration endpoint. apiLimiter (500/15min) already
 // covers it, but a dedicated limiter satisfies the per-route policy and caps abuse

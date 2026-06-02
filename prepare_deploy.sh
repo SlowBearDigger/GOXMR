@@ -20,12 +20,28 @@ if [ $? -ne 0 ]; then
 fi
 
 # 3. Copy Server Files
+# Mirror the entire server/ tree minus runtime artefacts so subdirectories
+# (pay/, …) and new top-level modules are picked up automatically. Manually
+# enumerating files here used to drop server/pay/, server/store-endpoints.js,
+# server/pgpDms.js, server/federation.js, server/selfDestruct.js, etc. — every
+# one a route handler the runtime requires. rsync with excludes scales as the
+# codebase grows; the previous list rotted silently.
 echo "📂 Copying Server Files..."
-cp $SERVER_DIR/package.json $DEPLOY_DIR/
-cp $SERVER_DIR/index.js $DEPLOY_DIR/
-cp $SERVER_DIR/db.js $DEPLOY_DIR/
-cp $SERVER_DIR/monero_monitor.js $DEPLOY_DIR/
-cp $SERVER_DIR/migrate*.js $DEPLOY_DIR/
+rsync -a \
+    --exclude='.env' \
+    --exclude='.env.*' \
+    --exclude='node_modules' \
+    --exclude='database.db' \
+    --exclude='database.db.*' \
+    --exclude='goxmr.db' \
+    --exclude='goxmr.db.*' \
+    --exclude='wallet_data' \
+    --exclude='*.log' \
+    --exclude='.altcha_key' \
+    --exclude='test_*.js' \
+    --exclude='verify_*.js' \
+    --exclude='purge_*.js' \
+    $SERVER_DIR/ $DEPLOY_DIR/
 
 # Create a clean .env file (DO NOT COPY LOCAL SECRETS)
 echo "🔒 Creating template .env..."

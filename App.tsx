@@ -23,6 +23,12 @@ import { TermsPage } from './components/TermsPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { PrivacyNotice } from './components/PrivacyNotice';
 import { StatusPage } from './components/StatusPage';
+import { PayLandingPage } from './components/pay/PayLandingPage';
+import { PaySignupPage } from './components/pay/PaySignupPage';
+import { PayLoginPage } from './components/pay/PayLoginPage';
+import { PayDashboardPage } from './components/pay/PayDashboardPage';
+import { PayCheckoutPage } from './components/pay/PayCheckoutPage';
+import { PayDocsPage } from './components/pay/PayDocsPage';
 
 const MainLayout: React.FC<{
     isLoggedIn: boolean;
@@ -251,6 +257,16 @@ const App: React.FC = () => {
                 {/* Specific routes - MUST be before /:username catch-all */}
                 <Route path="/s/:code" element={<ResolverPage mode="signal" />} />
                 <Route path="/d/:code" element={<ResolverPage mode="drop" />} />
+
+                {/* GoXMR Pay — merchant gateway. Static paths win over /pay/:username via
+                    React Router specificity ranking, so the order here is forgiving. */}
+                <Route path="/pay" element={<PayLandingPage />} />
+                <Route path="/pay/signup" element={<PaySignupPage />} />
+                <Route path="/pay/login" element={<PayLoginPage />} />
+                <Route path="/pay/dashboard" element={<PayDashboardPage />} />
+                <Route path="/pay/docs" element={<PayDocsPage />} />
+                <Route path="/pay/checkout/:orderId" element={<PayCheckoutPage />} />
+
                 <Route path="/pay/:username" element={<PaymentPage />} />
                 {/* #4.1: public stateless order tracker + local-only "my orders" list */}
                 <Route path="/track/:orderCode" element={<OrderTracker />} />

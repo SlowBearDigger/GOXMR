@@ -2,6 +2,7 @@ const monerojs = require('monero-ts');
 const path = require('path');
 const fs = require('fs');
 const db = require('./db');
+const { nodePool } = require('./monero/nodePool');
 
 class MoneroMonitor {
     constructor() {
@@ -29,24 +30,11 @@ class MoneroMonitor {
         }
     }
 
-    // Build prioritized daemon URL list from env: MONERO_NODE_URL is primary,
-    // MONERO_NODE_FALLBACKS is a comma/space-separated list. Each entry is normalized
-    // to include protocol (https for :443 or no port, http otherwise).
+    // daemon url list now comes from the shared, health-aware nodePool so this
+    // monitor and the pay wallet pool can't drift apart again. kept as a method
+    // so init()'s call site stays untouched.
     _buildNodeList() {
-        const normalize = (u) => {
-            u = u.trim();
-            if (!u) return null;
-            if (!u.startsWith('http://') && !u.startsWith('https://')) {
-                u = (u.includes(':443') || !u.includes(':')) ? ('https://' + u) : ('http://' + u);
-            }
-            return u;
-        };
-        const primary = (process.env.MONERO_WALLET_RPC_URL || process.env.MONERO_NODE_URL || '').trim();
-        const fallbacks = (process.env.MONERO_NODE_FALLBACKS || '').split(/[,\s]+/).filter(Boolean);
-        return [primary, ...fallbacks]
-            .map(normalize)
-            .filter(Boolean)
-            .filter((u, i, arr) => arr.indexOf(u) === i); // dedupe
+        return nodePool.urls();
     }
 
     async init() {
@@ -122,26 +110,30 @@ class MoneroMonitor {
     }
 
     // Try to (re)establish a daemon connection by walking the priority list.
-    // Returns true if we got connected, false if every node failed.
+    // Returns true if we got connected, false if every node failed. ordering is
+    // the nodePool's health verdict (live + on-tip + low-latency first), fetched
+    // fresh each call; the outcome feeds back via markOk/markFail.
     async _ensureDaemonConnection() {
         if (!this.wallet) return false;
         try {
             if (await this.wallet.isConnectedToDaemon()) return true;
         } catch { /* fall through to rotation */ }
-        const nodes = this.nodes && this.nodes.length ? this.nodes : [this.daemonUrl];
-        for (let attempt = 0; attempt < nodes.length; attempt++) {
-            const idx = (this.activeNodeIdx + attempt) % nodes.length;
-            const url = nodes[idx];
+        const nodes = nodePool.urls();
+        const candidates = nodes.length ? nodes : [this.daemonUrl].filter(Boolean);
+        for (let i = 0; i < candidates.length; i++) {
+            const url = candidates[i];
             try {
-                console.log(`[MONERO] Trying node ${idx + 1}/${nodes.length}: ${url}`);
+                console.log(`[MONERO] Trying node ${i + 1}/${candidates.length}: ${url}`);
                 await this.wallet.setDaemonConnection(url);
                 if (await this.wallet.isConnectedToDaemon()) {
-                    this.activeNodeIdx = idx;
                     this.daemonUrl = url;
+                    nodePool.markOk(url);
                     console.log(`[MONERO] Connected to ${url}`);
                     return true;
                 }
+                nodePool.markFail(url);
             } catch (e) {
+                nodePool.markFail(url);
                 console.warn(`[MONERO] Node ${url} failed: ${e.message}`);
             }
         }

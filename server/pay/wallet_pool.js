@@ -11,6 +11,7 @@ const monerojs = require('monero-ts');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { nodePool } = require('../monero/nodePool');
 
 const PAY_WALLET_DIR = path.resolve('./wallet_data/pay');
 const WALLET_IDLE_TTL_MS = 5 * 60 * 1000;        // close if untouched for 5 min
@@ -37,20 +38,7 @@ function ensureDir() {
 function walletPathFor(merchantId) {
     return path.join(PAY_WALLET_DIR, `merchant_${merchantId}`);
 }
-function buildNodeList() {
-    const normalize = (u) => {
-        u = (u || '').trim();
-        if (!u) return null;
-        if (!u.startsWith('http://') && !u.startsWith('https://')) {
-            u = (u.includes(':443') || !u.includes(':')) ? ('https://' + u) : ('http://' + u);
-        }
-        return u;
-    };
-    const primary = (process.env.MONERO_WALLET_RPC_URL || process.env.MONERO_NODE_URL || '').trim();
-    const fallbacks = (process.env.MONERO_NODE_FALLBACKS || '').split(/[,\s]+/).filter(Boolean);
-    const list = [primary, ...fallbacks].map(normalize).filter(Boolean);
-    return list.length ? list : ['https://xmr-node.cakewallet.com:18081'];
-}
+// daemon list + failover ordering now live in the shared, health-aware nodePool.
 
 // per-merchant async mutex. monero-ts wallet objects are NOT safe for concurrent
 // access — running sync() in the scanner while a request handler calls
@@ -73,7 +61,6 @@ class WalletPool {
         this.cache = new Map();
         // merchantId -> queue function (one mutex per merchant)
         this.locks = new Map();
-        this.daemons = buildNodeList();
         this._startReaper();
     }
 
@@ -116,7 +103,9 @@ class WalletPool {
         const exists = fs.existsSync(wpath + '.keys');
         const targetPassword = walletPasswordFor(merchant.id);
         let lastErr = null;
-        for (const daemon of this.daemons) {
+        // fresh health-sorted list each open so we follow the prober's latest
+        // verdict rather than a snapshot frozen at construction time.
+        for (const daemon of nodePool.urls()) {
             try {
                 let wallet;
                 let needsRekey = false;
@@ -169,10 +158,12 @@ class WalletPool {
                     }
                 }
                 this.cache.set(merchant.id, { wallet, lastUsed: Date.now() });
+                nodePool.markOk(daemon);
                 console.log(`[PAY-POOL] opened wallet merchant=${merchant.id} via ${daemon}${needsRekey ? ' (migrated)' : ''}`);
                 return wallet;
             } catch (err) {
                 lastErr = err;
+                nodePool.markFail(daemon);
                 console.warn(`[PAY-POOL] open failed merchant=${merchant.id} via ${daemon}: ${err.message}`);
             }
         }

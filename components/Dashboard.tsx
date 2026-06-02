@@ -13,6 +13,8 @@ import { PgpInbox } from './PgpInbox';
 import { MyHandlesCard } from './MyHandlesCard';
 import { GalleryEditor } from './GalleryEditor';
 import { DashboardOverview } from './DashboardOverview';
+import { PromptDialog } from './PromptDialog';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { Link, Wallet } from '../types.ts';
 const INITIAL_LINKS: Link[] = [];
 const INITIAL_WALLETS: Wallet[] = [];
@@ -125,6 +127,11 @@ export const Dashboard: React.FC = () => {
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [navNotifications, setNavNotifications] = useState({ store_orders: 0, unread_messages: 0, deadman_active: 0 });
 
+    // dialog state for the styled replacements of window.prompt/confirm
+    const [editSignalDialog, setEditSignalDialog] = useState<{ id: number; url: string } | null>(null);
+    const [extendDropDialog, setExtendDropDialog] = useState<{ id: number } | null>(null);
+    const [deployConfirmDialog, setDeployConfirmDialog] = useState<{ emptyCount: number } | null>(null);
+
     const fetchUserContent = async () => {
         const token = localStorage.getItem('goxmr_token');
         if (!token) return;
@@ -138,13 +145,17 @@ export const Dashboard: React.FC = () => {
         } catch (e) { console.error(e); }
     };
 
-    const editSignal = async (id: number, currentUrl: string) => {
-        const newUrl = window.prompt("Update Target URL:", currentUrl);
-        if (!newUrl || newUrl === currentUrl) return;
+    const editSignal = (id: number, currentUrl: string) => {
+        setEditSignalDialog({ id, url: currentUrl });
+    };
 
+    const submitEditSignal = async (newUrl: string) => {
+        const dialog = editSignalDialog;
+        setEditSignalDialog(null);
+        if (!dialog || !newUrl || newUrl === dialog.url) return;
         const token = localStorage.getItem('goxmr_token');
         try {
-            const res = await fetch(`/api/me/signals/${id}`, {
+            const res = await fetch(`/api/me/signals/${dialog.id}`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -156,19 +167,23 @@ export const Dashboard: React.FC = () => {
         } catch (e) { console.error(e); }
     };
 
-    const extendDrop = async (id: number) => {
-        const hours = window.prompt("Extend expiry by hours (e.g. 24):", "24");
-        if (!hours || isNaN(Number(hours))) return;
+    const extendDrop = (id: number) => {
+        setExtendDropDialog({ id });
+    };
 
+    const submitExtendDrop = async (hoursStr: string) => {
+        const dialog = extendDropDialog;
+        setExtendDropDialog(null);
+        if (!dialog || !hoursStr || isNaN(Number(hoursStr))) return;
         const token = localStorage.getItem('goxmr_token');
         try {
-            const res = await fetch(`/api/me/drops/${id}`, {
+            const res = await fetch(`/api/me/drops/${dialog.id}`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ extendHours: Number(hours) })
+                body: JSON.stringify({ extendHours: Number(hoursStr) })
             });
             if (res.ok) fetchUserContent();
         } catch (e) { console.error(e); }
@@ -323,17 +338,18 @@ export const Dashboard: React.FC = () => {
     const [isDeploying, setIsDeploying] = useState(false);
     const [isDeploySuccess, setIsDeploySuccess] = useState(false);
     const handleDeploy = async () => {
+        const emptyWallets = wallets.filter(w => !w.address);
+        if (emptyWallets.length > 0) {
+            setDeployConfirmDialog({ emptyCount: emptyWallets.length });
+            return;
+        }
+        await performDeploy();
+    };
+
+    const performDeploy = async () => {
         setIsDeploying(true);
         setIsDeploySuccess(false);
         const token = localStorage.getItem('goxmr_token');
-        const emptyWallets = wallets.filter(w => !w.address);
-        if (emptyWallets.length > 0) {
-            const confirm = window.confirm(`Warning: ${emptyWallets.length} wallet(s) have no address. They will be invisible on your public profile. Proceed anyway?`);
-            if (!confirm) {
-                setIsDeploying(false);
-                return;
-            }
-        }
 
         const designData = {
             accentColor,
@@ -415,11 +431,11 @@ export const Dashboard: React.FC = () => {
                 else if (type === 'audio') setMusicUrl(fullUrl);
             } else {
                 const errData = await res.json();
-                alert(`Upload failed: ${errData.error || 'Server Error'}`);
+                showToast(`Upload failed: ${errData.error || 'Server Error'}`, 'error');
             }
         } catch (error) {
             console.error("Upload failed", error);
-            alert("Upload failed. Check server logs.");
+            showToast('Upload failed. Check server logs.', 'error');
         }
     };
     const removeMusic = async () => {
@@ -1491,6 +1507,42 @@ export const Dashboard: React.FC = () => {
                     initialProduct={editingProduct}
                 />
             )}
+
+            <PromptDialog
+                isOpen={!!editSignalDialog}
+                title="UPDATE_TARGET_URL"
+                label="Target URL"
+                initialValue={editSignalDialog?.url || ''}
+                placeholder="https://..."
+                confirmLabel="Update"
+                onCancel={() => setEditSignalDialog(null)}
+                onConfirm={submitEditSignal}
+            />
+
+            <PromptDialog
+                isOpen={!!extendDropDialog}
+                title="EXTEND_EXPIRY"
+                label="Hours to extend (e.g. 24)"
+                initialValue="24"
+                placeholder="24"
+                confirmLabel="Extend"
+                onCancel={() => setExtendDropDialog(null)}
+                onConfirm={submitExtendDrop}
+            />
+
+            <ConfirmDialog
+                isOpen={!!deployConfirmDialog}
+                title="DEPLOY_WARNING"
+                message={
+                    deployConfirmDialog
+                        ? `Warning: ${deployConfirmDialog.emptyCount} wallet(s) have no address. They will be invisible on your public profile. Proceed anyway?`
+                        : ''
+                }
+                confirmLabel="Deploy Anyway"
+                destructive
+                onCancel={() => setDeployConfirmDialog(null)}
+                onConfirm={() => { setDeployConfirmDialog(null); performDeploy(); }}
+            />
         </div >
     );
 };

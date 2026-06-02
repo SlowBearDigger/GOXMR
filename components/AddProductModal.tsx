@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { Package, X, Plus, Trash2, Globe, FileText, Link as LinkIcon, Lock, Image as ImageIcon, Loader2, Edit } from 'lucide-react';
+import { useModalChrome } from '../hooks/useModalChrome';
 // API calls use raw fetch with manual token attachment
 
 interface AddProductModalProps {
@@ -14,6 +16,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const modalContentRef = useRef<HTMLDivElement>(null);
+    const titleId = useId();
+    useModalChrome({ isOpen, onClose, contentRef: modalContentRef });
 
     // Product Basic Info
     const [productType, setProductType] = useState<'physical' | 'digital' | 'service'>('digital');
@@ -232,11 +237,23 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-white shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] dark:shadow-[12px_12px_0px_0px_rgba(255,255,255,1)] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative">
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            onClick={onClose}
+        >
+            <div
+                ref={modalContentRef}
+                tabIndex={-1}
+                onClick={e => e.stopPropagation()}
+                className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-white shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] dark:shadow-[12px_12px_0px_0px_rgba(255,255,255,1)] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative outline-none"
+            >
                 <button
                     onClick={onClose}
+                    aria-label="Close"
                     className="absolute top-4 right-4 p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 border-2 border-transparent hover:border-black dark:hover:border-white transition-all"
                 >
                     <X size={24} className="dark:text-white" />
@@ -246,7 +263,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                     <div className="bg-monero-orange p-3 border-2 border-black">
                         <Package size={24} className="text-white" />
                     </div>
-                    <h2 className="text-2xl font-black font-mono uppercase dark:text-white">Add New Product</h2>
+                    <h2 id={titleId} className="text-2xl font-black font-mono uppercase dark:text-white">Add New Product</h2>
                 </div>
 
                 <div className="space-y-6">
@@ -582,6 +599,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

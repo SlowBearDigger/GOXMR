@@ -488,6 +488,57 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
+const uploadDirReal = fs.realpathSync(uploadDir);
+
+// build a path inside uploadDir that is guaranteed not to escape it.
+// strip directory separators from `name`, resolve, and verify the result
+// stays inside uploadDir. throws on escape attempts. use this for any path
+// derived from request data (multer file.filename / file.originalname).
+function safeUploadPath(name) {
+    const cleaned = path.basename(String(name || ''));
+    if (!cleaned || cleaned === '.' || cleaned === '..') {
+        throw new Error('invalid filename');
+    }
+    const resolved = path.resolve(uploadDirReal, cleaned);
+    if (resolved !== path.join(uploadDirReal, cleaned) || !resolved.startsWith(uploadDirReal + path.sep)) {
+        throw new Error('path escape detected');
+    }
+    return resolved;
+}
+
+// remove html-style tags from a user-provided string. iterates until the
+// result stops changing, which neutralises overlap tricks like
+// "<<script>script>alert(1)</script>" — a single pass would leave the inner
+// <script> intact after stripping the outer tokens. caps iterations defensively
+// so a pathological input can never spin the loop.
+function stripHtmlSafe(str) {
+    if (typeof str !== 'string') return str;
+    let prev = str;
+    for (let i = 0; i < 8; i++) {
+        const next = prev.replace(/<[^<>]*>/g, '');
+        if (next === prev) return next;
+        prev = next;
+    }
+    return prev;
+}
+
+// structural email/handle validator. avoids regex with overlapping character
+// classes like `[^\s@]+\.[^\s@]+$` which can backtrack on inputs of the form
+// `!@!.!.!.!.X`. splits on `@` and the final `.` instead — linear time,
+// deterministic, ReDoS-proof. `allowed` restricts the per-segment charset.
+function isValidLooseEmail(s, allowed = /^[^\s@]+$/) {
+    if (typeof s !== 'string') return false;
+    if (s.length < 5 || s.length > 254) return false;
+    const at = s.indexOf('@');
+    if (at <= 0 || at !== s.lastIndexOf('@')) return false;
+    const local = s.slice(0, at);
+    const domain = s.slice(at + 1);
+    const dot = domain.lastIndexOf('.');
+    if (dot <= 0 || dot >= domain.length - 1) return false;
+    if (!allowed.test(local) || !allowed.test(domain)) return false;
+    return true;
+}
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadDir);
@@ -554,31 +605,48 @@ app.post('/api/me/premium/check', authenticateToken, async (req, res) => {
         const { txid } = req.body;
         console.log(`[PREMIUM] Manual check requested by ${req.user.username}. TXID Provided: ${!!txid}`);
 
-        let customMessage = null;
+        // status drives the UI. don't conflate "the request worked" with "premium activated":
+        //   'activated'  → premium turned on (now or already)
+        //   'pending'    → tx found but not enough confirmations yet
+        //   'not_found'  → tx id not in the user's subaddress history
+        //   'scanning'   → no txid provided, started a background sweep
+        let status = 'scanning';
+        let message = null;
 
         if (txid) {
             const result = await moneroMonitor.checkPaymentByTxid(req.user.userId, txid);
             if (result.found && result.valid) {
-                customMessage = "Transaction Confirmed! Premium Activated.";
+                status = 'activated';
+                message = 'Transaction confirmed — premium is now active.';
             } else if (result.found && !result.valid) {
-                customMessage = `Transaction found but not ready: ${result.reason}`;
+                status = 'pending';
+                // result.reason already reads like a sentence ("Waiting for confirmations (0/1)")
+                message = result.reason || 'Transaction found but still waiting for confirmations.';
             } else {
-                customMessage = "Transaction ID not found in your subaddress history.";
+                status = 'not_found';
+                message = 'No matching transaction in your subaddress history yet. If you just paid, wait ~2 minutes and try again.';
             }
         } else {
             await moneroMonitor.forceCheck();
+            message = 'Background scan started. Refresh in a few seconds.';
         }
 
-        // Re-fetch user status
+        // Re-fetch user status — the txid may have already been processed and flipped is_premium.
         const user = await dbGet('SELECT is_premium FROM users WHERE id = ?', [req.user.userId]);
+        const isPremium = !!user.is_premium;
+        if (isPremium && status !== 'activated') status = 'activated';
+
+        // success now reflects whether premium is on, not just whether the handler ran cleanly.
+        // 'pending' is still a successful detection in terms of UX, just not the terminal state.
         res.json({
-            success: true,
-            isPremium: !!user.is_premium,
-            message: user.is_premium ? (customMessage || 'Premium status confirmed!') : (customMessage || 'No confirmed payment found yet. Scanning...')
+            success: isPremium || status === 'pending' || status === 'scanning',
+            status,
+            isPremium,
+            message: isPremium ? (message || 'Premium status confirmed.') : (message || 'No confirmed payment found yet.')
         });
     } catch (err) {
         console.error('Manual Premium Check Error:', err);
-        res.status(500).json({ error: err.message || 'Manual check failed' });
+        res.status(500).json({ success: false, status: 'error', error: err.message || 'Manual check failed' });
     }
 });
 const dbAll = (query, params) => {
@@ -617,8 +685,9 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
         const { links, wallets, design } = req.body;
         const userId = req.user.userId;
 
-        // Strip HTML tags from user input to prevent stored XSS
-        const stripHtml = (str) => typeof str === 'string' ? str.replace(/<[^>]*>/g, '') : str;
+        // strip html tags from user input to prevent stored xss — uses the
+        // overlap-safe helper so nested tokens like "<<script>script>" cannot survive.
+        const stripHtml = stripHtmlSafe;
 
         // Validate color values in design config
         const isValidColor = (val) => {
@@ -661,16 +730,17 @@ app.post('/api/me/sync', authenticateToken, async (req, res) => {
                     const safeTitle = stripHtml(l.title);
                     const safeUrl = stripHtml(l.url);
 
-                    if (l.id) {
-                        // Update existing link
-                        const exists = existingLinks.find(el => el.id === l.id);
-                        if (exists) {
-                            await dbRun('UPDATE links SET type = ?, title = ?, url = ?, icon = ? WHERE id = ? AND user_id = ?',
-                                [l.type, safeTitle, safeUrl, l.icon, l.id, userId]);
-                            processedLinkIds.add(l.id);
-                        }
+                    // the client assigns Date.now() as a temporary id for newly-added
+                    // links (so React can key them in the list). that id never matches
+                    // a DB row, so we cannot use `l.id is truthy` as a "this is an
+                    // existing row" signal — match against the existing rows directly
+                    // and fall through to INSERT for anything we don't find.
+                    const exists = l.id ? existingLinks.find(el => el.id === l.id) : null;
+                    if (exists) {
+                        await dbRun('UPDATE links SET type = ?, title = ?, url = ?, icon = ? WHERE id = ? AND user_id = ?',
+                            [l.type, safeTitle, safeUrl, l.icon, l.id, userId]);
+                        processedLinkIds.add(l.id);
                     } else {
-                        // Insert new link
                         const result = await dbRun('INSERT INTO links (user_id, type, title, url, icon) VALUES (?, ?, ?, ?, ?)',
                             [userId, l.type, safeTitle, safeUrl, l.icon]);
                         processedLinkIds.add(result.lastID);
@@ -869,12 +939,14 @@ app.put('/api/me', authenticateToken, async (req, res) => {
         // Mastodon: handle@instance.tld
         if (mastodon_handle !== undefined && mastodon_handle !== null && mastodon_handle !== '') {
             const mh = String(mastodon_handle).trim().replace(/^@/, '');
-            if (!/^[a-z0-9_.-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(mh)) {
+            // ReDoS-proof: structural split + bounded charset per segment
+            if (!isValidLooseEmail(mh, /^[a-z0-9_.-]+$/i)) {
                 return res.status(400).json({ error: 'mastodon_handle must look like name@instance.tld' });
             }
         }
 
-        const stripHtml = (str) => typeof str === 'string' ? str.replace(/<[^>]*>/g, '') : str;
+        // overlap-safe variant; see stripHtmlSafe above.
+        const stripHtml = stripHtmlSafe;
         const norm = (v) => (v === undefined ? null : (v === '' ? null : v));
 
         await dbRun(
@@ -916,13 +988,16 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
         }
         if (IS_DEV) console.log(`[UPLOAD] Received file: ${req.file.originalname} (${req.file.size} bytes)`);
 
-        const originalPath = req.file.path;
+        // safeUploadPath strips any path separators from multer's filename and verifies the
+        // resolved path stays inside uploadDir. all subsequent fs ops below operate on
+        // originalPath / targetPath which have already passed this guard.
+        const originalPath = safeUploadPath(path.basename(req.file.path));
         let fileUrl = '';
 
         if (type === 'audio') {
             const extension = path.extname(req.file.originalname).toLowerCase();
             const filename = `${req.file.filename.split('.')[0]}${extension}`;
-            const targetPath = path.join(uploadDir, filename);
+            const targetPath = safeUploadPath(filename);
             fs.renameSync(originalPath, targetPath);
             fileUrl = `/uploads/${filename}`;
 
@@ -939,7 +1014,7 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
             }
 
             const filename = `${req.file.filename.split('.')[0]}.gif`;
-            const targetPath = path.join(uploadDir, filename);
+            const targetPath = safeUploadPath(filename);
 
             // Just move the file to keep it simple and preserve animation
             fs.renameSync(originalPath, targetPath);
@@ -959,7 +1034,7 @@ app.post('/api/me/upload/:type', authenticateToken, upload.single('image'), asyn
             // a deterministic optimized filename. The result is always .webp regardless
             // of source format, and the temporary upload is removed.
             const baseName = `${req.file.filename.split('.')[0]}-opt.webp`;
-            const optimizedPath = path.join(uploadDir, baseName);
+            const optimizedPath = safeUploadPath(baseName);
             let sharpInstance = sharp(originalPath);
             if (type === 'banner') {
                 sharpInstance = sharpInstance.resize(1500, 500, { fit: 'cover', position: 'center' });
@@ -1088,7 +1163,7 @@ app.post('/api/me/gallery', authenticateToken, upload.array('images', GALLERY_MA
         const have = count?.n || 0;
         if (have + files.length > GALLERY_MAX_PER_USER) {
             // unlink everything we received, refuse atomically
-            for (const f of files) fs.unlink(f.path, () => {});
+            for (const f of files) fs.unlink(safeUploadPath(path.basename(f.path)), () => {});
             return res.status(409).json({
                 error: `Would exceed quota (${GALLERY_MAX_PER_USER} images). You have ${have}, sent ${files.length}.`
             });
@@ -1102,14 +1177,16 @@ app.post('/api/me/gallery', authenticateToken, upload.array('images', GALLERY_MA
         let nextOrder = maxRow.next;
         for (const file of files) {
             const isGif = path.extname(file.originalname).toLowerCase() === '.gif';
+            // sanitize once per file; subsequent fs ops use the validated path
+            const safeOriginal = safeUploadPath(path.basename(file.path));
             if (isGif && file.size > 5 * 1024 * 1024) {
-                fs.unlink(file.path, () => {});
+                fs.unlink(safeOriginal, () => {});
                 continue;
             }
-            const { ext, buffer } = await processGalleryImage(file.path, isGif);
+            const { ext, buffer } = await processGalleryImage(safeOriginal, isGif);
             const filename = `${file.filename.split('.')[0]}-gal${ext}`;
-            await fs.promises.writeFile(path.join(uploadDir, filename), buffer);
-            fs.unlink(file.path, () => {});
+            await fs.promises.writeFile(safeUploadPath(filename), buffer);
+            fs.unlink(safeOriginal, () => {});
             const fileUrl = `/uploads/${filename}`;
             const result = await dbRun(
                 'INSERT INTO gallery_images (user_id, file_url, caption, alt_text, visibility, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
@@ -1122,7 +1199,10 @@ app.post('/api/me/gallery', authenticateToken, upload.array('images', GALLERY_MA
         if (user) profileCache.del(`user:${user.username}`);
         res.json({ created, count: created.length });
     } catch (err) {
-        for (const f of files) fs.unlink(f.path, () => {});
+        // best-effort cleanup; each path goes through safeUploadPath guard
+        for (const f of files) {
+            try { fs.unlink(safeUploadPath(path.basename(f.path)), () => {}); } catch {}
+        }
         const id = logError('GALLERY_UPLOAD', err, { userId: req.user?.userId });
         res.status(500).json({ error: 'Upload failed', id });
     }
@@ -1189,12 +1269,11 @@ app.delete('/api/me/gallery/:id', authenticateToken, async (req, res) => {
         const row = await dbGet('SELECT file_url FROM gallery_images WHERE id = ? AND user_id = ?', [id, req.user.userId]);
         if (!row) return res.status(404).json({ error: 'Not found' });
         await dbRun('DELETE FROM gallery_images WHERE id = ? AND user_id = ?', [id, req.user.userId]);
-        // best-effort file removal
+        // best-effort file removal; safeUploadPath guards against any DB row that
+        // somehow stored an escape path (defence-in-depth).
         try {
             const filename = row.file_url.replace(/^\/uploads\//, '');
-            if (filename && !filename.includes('..')) {
-                fs.unlink(path.join(uploadDir, filename), () => {});
-            }
+            fs.unlink(safeUploadPath(filename), () => {});
         } catch {}
         const user = await dbGet('SELECT username FROM users WHERE id = ?', [req.user.userId]);
         if (user) profileCache.del(`user:${user.username}`);
@@ -1307,7 +1386,8 @@ app.post('/api/user/:username/message', messageLimiter, verifyAltcha, async (req
         if (!user) return res.status(404).json({ error: 'User not found' });
         if (!user.pgp_public_key) return res.status(400).json({ error: 'User does not accept encrypted messages' });
 
-        const stripHtml = (str) => typeof str === 'string' ? str.replace(/<[^>]*>/g, '') : str;
+        // overlap-safe variant; see stripHtmlSafe above.
+        const stripHtml = stripHtmlSafe;
         await dbRun(
             'INSERT INTO encrypted_messages (recipient_user_id, sender_name, encrypted_content) VALUES (?, ?, ?)',
             [user.id, stripHtml(sender_name) || 'Anonymous', encrypted_content]
@@ -1432,11 +1512,11 @@ app.delete('/api/tools/deadman/:id', authenticateToken, async (req, res) => {
 // --- SIGNALS & DROPS API ---
 
 function generateShortCode(length = 6) {
+    // unbiased uniform selection via crypto.randomInt (no modulo bias since 256 % 62 != 0)
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const bytes = crypto.randomBytes(length);
     let result = '';
     for (let i = 0; i < length; i++) {
-        result += chars.charAt(bytes[i] % chars.length);
+        result += chars.charAt(crypto.randomInt(0, chars.length));
     }
     return result;
 }
@@ -1970,9 +2050,16 @@ app.get('/api/trocador/trade/:id', async (req, res) => {
 // HIBP k-anonymity check. Sends only the first 5 chars of SHA-1(password) to the
 // pwnedpasswords range API and matches the rest locally. Opt-out with HIBP_DISABLED=1.
 // Fails open: if the API is unreachable, registration proceeds.
+//
+// SHA-1 is intentional here: it is the protocol mandated by the haveibeenpwned
+// k-anonymity API. The full hash never leaves the server (only the 5-char prefix),
+// and the password is NOT stored as SHA-1 — bcrypt handles persistence elsewhere.
+// codeql[js/insufficient-password-hash] suppressed: this is a breach-check probe,
+// not a credential storage hash.
 async function isPasswordBreached(password) {
     if (process.env.HIBP_DISABLED === '1') return false;
     try {
+        // lgtm[js/insufficient-password-hash]
         const sha1 = crypto.createHash('sha1').update(password).digest('hex').toUpperCase();
         const prefix = sha1.slice(0, 5);
         const suffix = sha1.slice(5);
@@ -2434,7 +2521,7 @@ app.get('/.well-known/webfinger', async (req, res) => {
         ];
         // If the user pointed to an external Mastodon/Pleroma account, federate to it.
         // Without this, the previous response advertised a non-existent ActivityPub endpoint.
-        if (user.mastodon_handle && /^[a-z0-9_.-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(user.mastodon_handle)) {
+        if (user.mastodon_handle && isValidLooseEmail(user.mastodon_handle, /^[a-z0-9_.-]+$/i)) {
             const [mhUser, mhInstance] = user.mastodon_handle.split('@');
             links.push({
                 rel: 'self',
@@ -2654,7 +2741,8 @@ app.post('/api/explorer/rpc', async (req, res) => {
 app.put('/api/me/notifications', authenticateToken, async (req, res) => {
     try {
         const { email, enabled } = req.body;
-        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        // ReDoS-proof structural validator (see isValidLooseEmail)
+        if (email && !isValidLooseEmail(email)) {
             return res.status(400).json({ error: 'Invalid email format' });
         }
         await dbRun('UPDATE users SET notification_email = ?, email_notifications = ? WHERE id = ?',
@@ -2921,8 +3009,20 @@ startPaymentScanner({ dbAll, dbRun, dbGet, logError });
 startWalletScanner({ dbAll, dbRun, dbGet, queueWebhook, logError });
 console.log('GoXMR Pay endpoints registered (/pay/*)');
 
+// strict per-route limiter for the migration endpoint. apiLimiter (500/15min) already
+// covers it, but a dedicated limiter satisfies the per-route policy and caps abuse
+// of this filesystem-touching route to a handful of attempts per hour per ip.
+const migrationLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    message: { error: 'Migration endpoint rate limited' }
+});
+
 // ---- MIGRATION ENDPOINT (hit once after deploy) ----
-app.get('/api/run-migrations', async (req, res) => {
+app.get('/api/run-migrations', migrationLimiter, async (req, res) => {
     const results = [];
     const migrations = [
         // store_config

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Terminal, Webhook, ShieldCheck, Copy, Check } from 'lucide-react';
 import { PayLayout } from './PayLayout';
@@ -62,9 +62,7 @@ const CREATE_RESPONSE = `{
   "qr_data": "monero:8...?tx_amount=0.05"
 }`;
 
-const EMBED_HTML = `<script src="https://goxmr.click/pay/embed/pay.js"></script>
-
-<button data-goxmr-pay data-order-id="ord_abc123...">
+const EMBED_BUTTON = `<button data-goxmr-pay data-order-id="ord_abc123...">
   Pay 0.05 XMR
 </button>`;
 
@@ -165,7 +163,8 @@ export const PayDocsPage: React.FC = () => (
 
             <Section icon={<ShieldCheck size={18} />} title="3. Render the pay button">
                 <p>Drop the embed shim once on your page, then any button with <code className="bg-gray-100 dark:bg-zinc-800 px-1">data-goxmr-pay</code> + <code className="bg-gray-100 dark:bg-zinc-800 px-1">data-order-id</code> opens the checkout popup.</p>
-                <CodeBlock code={EMBED_HTML} />
+                <EmbedSnippet />
+                <p className="mt-2">The <code className="bg-gray-100 dark:bg-zinc-800 px-1">integrity</code> hash pins the exact shim bytes — if our origin or CDN ever served tampered JS, your visitors' browsers refuse to run it. Fetch the current value any time from <code className="bg-gray-100 dark:bg-zinc-800 px-1">/pay/embed/integrity</code>.</p>
                 <p className="mt-2">No iframe, no client-side amount tampering. The order ID is server-issued; the buyer can only pay the exact amount you set.</p>
             </Section>
 
@@ -203,6 +202,25 @@ const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.
         </div>
     </section>
 );
+
+const EmbedSnippet: React.FC = () => {
+    // pull the live SRI digest so the snippet pins the exact shim we serve. if a
+    // compromised origin/CDN ever altered pay.js the hash wouldn't match and the
+    // visitor's browser refuses to run it.
+    const [integrity, setIntegrity] = useState<string | null>(null);
+    useEffect(() => {
+        let alive = true;
+        fetch('/pay/embed/integrity')
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => { if (alive && d && d.integrity) setIntegrity(d.integrity); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, []);
+    const script = integrity
+        ? `<script src="https://goxmr.click/pay/embed/pay.js"\n        integrity="${integrity}"\n        crossorigin="anonymous"></script>`
+        : `<script src="https://goxmr.click/pay/embed/pay.js" crossorigin="anonymous"></script>`;
+    return <CodeBlock code={`${script}\n\n${EMBED_BUTTON}`} />;
+};
 
 const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
     const [copied, setCopied] = useState(false);

@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, Mail, Send, Lock, Eye, EyeOff, Trash2, Plus, RefreshCw, X } from 'lucide-react';
 import { showToast } from './Toast';
+import { useModalChrome } from '../hooks/useModalChrome';
 
 // End-to-end PGP direct messages between GOXMR users.
 // Sender encrypts in browser with recipient's pubkey (fetched from /api/user/:username).
@@ -41,6 +43,9 @@ export const PgpInbox: React.FC = () => {
     const [unlockedKey, setUnlockedKey] = useState<any>(null);
     const [decrypted, setDecrypted] = useState<Record<number, string | { error: string }>>({});
     const [decrypting, setDecrypting] = useState<number | null>(null);
+    const unlockModalRef = useRef<HTMLDivElement>(null);
+    const unlockTitleId = useId();
+    useModalChrome({ isOpen: unlockOpen, onClose: () => setUnlockOpen(false), contentRef: unlockModalRef });
 
     // Restore unlocked key from sessionStorage (same pattern as StoreSection)
     useEffect(() => {
@@ -204,15 +209,24 @@ export const PgpInbox: React.FC = () => {
             )}
 
             {/* Unlock modal */}
-            {unlockOpen && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            {unlockOpen && createPortal(
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={unlockTitleId}
+                >
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUnlockOpen(false)} />
-                    <div className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
-                        <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800">
-                            <h3 className="font-mono font-black uppercase text-base dark:text-white flex items-center gap-2"><Lock size={16} /> Unlock Inbox</h3>
-                            <button onClick={() => setUnlockOpen(false)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
+                    <div
+                        ref={unlockModalRef}
+                        tabIndex={-1}
+                        className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] flex flex-col max-h-[90vh] outline-none"
+                    >
+                        <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800 shrink-0">
+                            <h3 id={unlockTitleId} className="font-mono font-black uppercase text-base dark:text-white flex items-center gap-2"><Lock size={16} /> Unlock Inbox</h3>
+                            <button onClick={() => setUnlockOpen(false)} aria-label="Close" className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                         </div>
-                        <div className="p-5 space-y-3">
+                        <div className="p-5 space-y-3 overflow-y-auto flex-1">
                             <p className="font-mono text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
                                 Paste your PGP <span className="font-bold">private</span> key. Stored in this tab only — never sent to server.
                             </p>
@@ -240,7 +254,8 @@ export const PgpInbox: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {composeOpen && <ComposeModal onClose={() => setComposeOpen(false)} onSent={load} />}
@@ -255,6 +270,9 @@ const ComposeModal: React.FC<{ onClose: () => void; onSent: () => void }> = ({ o
     const [sending, setSending] = useState(false);
     const [recipientPgp, setRecipientPgp] = useState<string | null>(null);
     const [recipientError, setRecipientError] = useState('');
+    const composeRef = useRef<HTMLDivElement>(null);
+    const composeTitleId = useId();
+    useModalChrome({ isOpen: true, onClose, contentRef: composeRef });
 
     // Look up the recipient's PGP key as they type
     useEffect(() => {
@@ -310,15 +328,24 @@ const ComposeModal: React.FC<{ onClose: () => void; onSent: () => void }> = ({ o
         setSending(false);
     };
 
-    return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={composeTitleId}
+        >
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative w-full max-w-xl bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
-                <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800">
-                    <h3 className="font-mono font-black uppercase text-base dark:text-white flex items-center gap-2"><Send size={16} /> Compose PGP DM</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
+            <div
+                ref={composeRef}
+                tabIndex={-1}
+                className="relative w-full max-w-xl bg-white dark:bg-zinc-900 border-2 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] flex flex-col max-h-[90vh] outline-none"
+            >
+                <div className="flex items-center justify-between border-b-2 border-black dark:border-white p-4 bg-gray-50 dark:bg-zinc-800 shrink-0">
+                    <h3 id={composeTitleId} className="font-mono font-black uppercase text-base dark:text-white flex items-center gap-2"><Send size={16} /> Compose PGP DM</h3>
+                    <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                 </div>
-                <div className="p-5 space-y-3">
+                <div className="p-5 space-y-3 overflow-y-auto flex-1">
                     <div>
                         <label className="font-mono text-[10px] font-bold uppercase tracking-wider dark:text-white block mb-1">To</label>
                         <input
@@ -363,6 +390,7 @@ const ComposeModal: React.FC<{ onClose: () => void; onSent: () => void }> = ({ o
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

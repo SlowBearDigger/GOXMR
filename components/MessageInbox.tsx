@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { Mail, Trash2, Lock, Eye, Loader2, X } from 'lucide-react';
 import { showToast } from './Toast';
+import { useModalChrome } from '../hooks/useModalChrome';
 
 interface Message {
     id: number;
@@ -33,6 +35,8 @@ export const MessageInbox: React.FC = () => {
     const [decryptTarget, setDecryptTarget] = useState<Message | null>(null);
     const [privateKeyInput, setPrivateKeyInput] = useState('');
     const [passphraseInput, setPassphraseInput] = useState('');
+    const decryptModalRef = useRef<HTMLDivElement>(null);
+    const decryptTitleId = useId();
 
     useEffect(() => { loadMessages(); }, []);
 
@@ -60,6 +64,8 @@ export const MessageInbox: React.FC = () => {
         setPrivateKeyInput('');
         setPassphraseInput('');
     };
+
+    useModalChrome({ isOpen: !!decryptTarget, onClose: closeDecryptModal, contentRef: decryptModalRef });
 
     const handleDecrypt = async () => {
         if (!decryptTarget || !privateKeyInput.trim()) return;
@@ -169,9 +175,20 @@ export const MessageInbox: React.FC = () => {
             )}
 
             {/* PGP Decrypt Modal */}
-            {decryptTarget && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] w-full max-w-lg p-6 relative">
+            {decryptTarget && createPortal(
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby={decryptTitleId}
+                    onClick={closeDecryptModal}
+                >
+                    <div
+                        ref={decryptModalRef}
+                        tabIndex={-1}
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white dark:bg-zinc-900 border-4 border-black dark:border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] w-full max-w-lg p-6 relative outline-none max-h-[90vh] overflow-y-auto"
+                    >
                         <button
                             onClick={closeDecryptModal}
                             aria-label="Close"
@@ -182,7 +199,7 @@ export const MessageInbox: React.FC = () => {
 
                         <div className="flex items-center gap-2 mb-4">
                             <Lock size={16} className="text-monero-orange" />
-                            <h3 className="font-mono font-black text-sm uppercase dark:text-white">Decrypt Message</h3>
+                            <h3 id={decryptTitleId} className="font-mono font-black text-sm uppercase dark:text-white">Decrypt Message</h3>
                         </div>
 
                         <p className="font-mono text-[10px] text-gray-500 dark:text-gray-400 mb-4 uppercase">
@@ -228,7 +245,8 @@ export const MessageInbox: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

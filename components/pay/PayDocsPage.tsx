@@ -1,9 +1,148 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Terminal, Webhook, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Terminal, Webhook, ShieldCheck, Copy, Check } from 'lucide-react';
 import { PayLayout } from './PayLayout';
 
 // integration docs. minimal, copy-paste-ready. one screen to scan, one to read.
+// each code block has a copy button + language tabs where multiple flavours apply.
+
+type Lang = 'curl' | 'node' | 'python';
+
+const CREATE_ORDER: Record<Lang, string> = {
+    curl: `curl -X POST https://goxmr.click/pay/v1/orders \\
+  -H "Authorization: Bearer gxp_live_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "amount_xmr": 0.05,
+    "external_order_id": "ORDER-42",
+    "redirect_url": "https://you.com/thanks",
+    "metadata": { "sku": "T-SHIRT-L" }
+  }'`,
+    node: `// node >= 18 — uses built-in fetch
+const r = await fetch('https://goxmr.click/pay/v1/orders', {
+    method: 'POST',
+    headers: {
+        'Authorization': 'Bearer ' + process.env.GOXMR_PAY_KEY,
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        amount_xmr: 0.05,
+        external_order_id: 'ORDER-42',
+        redirect_url: 'https://you.com/thanks',
+        metadata: { sku: 'T-SHIRT-L' },
+    }),
+});
+const order = await r.json();
+// order.order_id, order.payment_address, order.checkout_url, order.qr_data`,
+    python: `import os, requests
+
+r = requests.post(
+    'https://goxmr.click/pay/v1/orders',
+    headers={'Authorization': f"Bearer {os.environ['GOXMR_PAY_KEY']}"},
+    json={
+        'amount_xmr': 0.05,
+        'external_order_id': 'ORDER-42',
+        'redirect_url': 'https://you.com/thanks',
+        'metadata': {'sku': 'T-SHIRT-L'},
+    },
+    timeout=10,
+)
+order = r.json()
+# order['order_id'], order['payment_address'], order['checkout_url'], order['qr_data']`,
+};
+
+const CREATE_RESPONSE = `{
+  "order_id": "ord_abc123...",
+  "payment_address": "8...",
+  "payment_subaddress_index": 17,
+  "amount_xmr": 0.05,
+  "status": "pending",
+  "expires_at": "2026-06-01T19:30:00Z",
+  "checkout_url": "https://goxmr.click/pay/checkout/ord_abc123...",
+  "qr_data": "monero:8...?tx_amount=0.05"
+}`;
+
+const EMBED_HTML = `<script src="https://goxmr.click/pay/embed/pay.js"></script>
+
+<button data-goxmr-pay data-order-id="ord_abc123...">
+  Pay 0.05 XMR
+</button>`;
+
+const WEBHOOK_PAYLOAD = `POST https://your-site.com/webhooks/goxmr-pay
+X-GoXMR-Pay-Signature: sha256=<hex hmac of body using webhook_secret>
+X-GoXMR-Pay-Event-Id: <uuid>
+Content-Type: application/json
+
+{
+  "event": "order.paid",
+  "order_id": "ord_abc123...",
+  "external_order_id": "ORDER-42",
+  "amount_xmr": 0.05,
+  "status": "paid",
+  "tx_hash": "...",
+  "confirmations": 1,
+  "timestamp": "2026-06-01T19:25:00Z"
+}`;
+
+const WEBHOOK_VERIFY: Record<Lang, string> = {
+    // curl doesn't really apply here — show the principle as a shell one-liner
+    curl: `# the signature header is: sha256=<hex hmac>
+# verify by recomputing hmac over the raw body using webhook_secret:
+echo -n "$RAW_BODY" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" -hex
+# the output must match the hex in the X-GoXMR-Pay-Signature header (after the "sha256=" prefix).`,
+    node: `// node >= 18 — express handler that verifies the signature in constant time
+import crypto from 'node:crypto';
+import express from 'express';
+
+const app = express();
+const SECRET = process.env.GOXMR_PAY_WEBHOOK_SECRET;
+
+// IMPORTANT: capture the RAW body bytes — JSON.parse loses formatting and
+// hmac compares byte-for-byte. use express.raw() for the webhook route only.
+app.post('/webhooks/goxmr-pay',
+    express.raw({ type: 'application/json' }),
+    (req, res) => {
+        const header = req.get('X-GoXMR-Pay-Signature') || '';
+        const expected = 'sha256=' + crypto
+            .createHmac('sha256', SECRET)
+            .update(req.body)
+            .digest('hex');
+        const a = Buffer.from(header);
+        const b = Buffer.from(expected);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+            return res.status(401).end();
+        }
+        const evt = JSON.parse(req.body.toString('utf8'));
+        // evt.event === 'order.paid' | 'order.expired'
+        // fulfil the order here; reply 2xx within 8s or we retry.
+        res.json({ ok: true });
+    },
+);`,
+    python: `# flask handler that verifies the signature in constant time
+import hmac, hashlib, os
+from flask import Flask, request, abort
+
+app = Flask(__name__)
+SECRET = os.environ['GOXMR_PAY_WEBHOOK_SECRET'].encode()
+
+@app.post('/webhooks/goxmr-pay')
+def webhook():
+    raw = request.get_data()  # raw bytes, NOT request.json
+    header = request.headers.get('X-GoXMR-Pay-Signature', '')
+    expected = 'sha256=' + hmac.new(SECRET, raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(header, expected):
+        abort(401)
+    evt = request.get_json()
+    # evt['event'] == 'order.paid' | 'order.expired'
+    # fulfil the order here; reply 2xx within 8s or we retry.
+    return {'ok': True}`,
+};
+
+const STATUS_POLL = `curl https://goxmr.click/pay/v1/orders/<order_id> \\
+  -H "Authorization: Bearer gxp_live_..."
+
+# same shape as create response, plus tx_hash + confirmed_at when paid.
+# alternative when webhooks aren't an option (mobile apps, static sites).`;
 
 export const PayDocsPage: React.FC = () => (
     <PayLayout>
@@ -15,67 +154,33 @@ export const PayDocsPage: React.FC = () => (
 
             <Section icon={<ShieldCheck size={18} />} title="1. Get your API key">
                 <p>Sign up at <Link className="text-monero-orange hover:underline" to="/pay/signup">/pay/signup</Link>, configure your Monero primary address and view key in the dashboard, then generate an API key. The key is shown <em>once</em> — store it server-side as a secret.</p>
-                <p className="mt-2 text-monero-orange">Why a view key? GoXMR Pay scans the blockchain to know when your buyers pay. The view key is read-only — we cannot move funds.</p>
+                <p className="mt-2 text-monero-orange">Why a view key? GoXMR Pay scans the blockchain to know when your buyers pay. The view key is read-only — it cannot move funds. Each order gets its own subaddress derived from your wallet so two orders of the same amount can't collide.</p>
             </Section>
 
             <Section icon={<Terminal size={18} />} title="2. Create an order from your backend">
-                <pre className="bg-black text-green-400 font-mono text-[11px] p-3 border-2 border-black overflow-x-auto leading-relaxed">{`POST /pay/v1/orders
-Authorization: Bearer gxp_live_…
-Content-Type: application/json
-
-{
-  "amount_xmr": 0.05,
-  "external_order_id": "ORDER-42",       // your internal ID, optional
-  "redirect_url": "https://you.com/thanks", // optional, buyer is sent here after pay
-  "metadata": { "sku": "T-SHIRT-L" }     // optional, JSON, stored as-is
-}`}</pre>
+                <CodeTabs blocks={CREATE_ORDER} />
                 <p className="mt-3">Response:</p>
-                <pre className="bg-black text-green-400 font-mono text-[11px] p-3 border-2 border-black overflow-x-auto leading-relaxed">{`{
-  "order_id": "ord_abc123…",
-  "payment_address": "4…",
-  "amount_xmr": 0.05,
-  "status": "pending",
-  "expires_at": "2026-06-01T19:30:00Z",
-  "checkout_url": "https://goxmr.click/pay/checkout/ord_abc123…",
-  "qr_data": "monero:4…?tx_amount=0.05"
-}`}</pre>
+                <CodeBlock code={CREATE_RESPONSE} />
             </Section>
 
             <Section icon={<ShieldCheck size={18} />} title="3. Render the pay button">
                 <p>Drop the embed shim once on your page, then any button with <code className="bg-gray-100 dark:bg-zinc-800 px-1">data-goxmr-pay</code> + <code className="bg-gray-100 dark:bg-zinc-800 px-1">data-order-id</code> opens the checkout popup.</p>
-                <pre className="bg-black text-green-400 font-mono text-[11px] p-3 border-2 border-black overflow-x-auto leading-relaxed">{`<script src="https://goxmr.click/pay/embed/pay.js"></script>
-
-<button data-goxmr-pay data-order-id="ord_abc123…">
-  Pay 0.05 XMR
-</button>`}</pre>
+                <CodeBlock code={EMBED_HTML} />
                 <p className="mt-2">No iframe, no client-side amount tampering. The order ID is server-issued; the buyer can only pay the exact amount you set.</p>
             </Section>
 
             <Section icon={<Webhook size={18} />} title="4. Receive webhook on payment">
                 <p>Configure a webhook URL in the dashboard. When an order moves to <code className="bg-gray-100 dark:bg-zinc-800 px-1">paid</code>, we POST:</p>
-                <pre className="bg-black text-green-400 font-mono text-[11px] p-3 border-2 border-black overflow-x-auto leading-relaxed">{`POST https://your-site.com/webhooks/goxmr-pay
-X-GoXMR-Pay-Signature: sha256=<hex hmac of body using webhook_secret>
-X-GoXMR-Pay-Event-Id: <uuid>
-Content-Type: application/json
-
-{
-  "event": "order.paid",
-  "order_id": "ord_abc123…",
-  "external_order_id": "ORDER-42",
-  "amount_xmr": 0.05,
-  "status": "paid",
-  "tx_hash": "…",
-  "confirmations": 1,
-  "timestamp": "2026-06-01T19:25:00Z"
-}`}</pre>
-                <p className="mt-2">Verify the signature: <code className="bg-gray-100 dark:bg-zinc-800 px-1">HMAC_SHA256(body, webhook_secret) === signature</code>. Reply with 2xx within 8s or we retry (exponential backoff up to 8 attempts).</p>
+                <CodeBlock code={WEBHOOK_PAYLOAD} />
+                <p className="mt-2">Verify the signature with the webhook secret you stored at API-key generation time. Reply with 2xx within 8s or we retry with exponential backoff (8 attempts, last one ~6 hours later).</p>
+                <p className="mt-3 font-bold text-monero-orange">⚠ Constant-time compare matters. Naive `===` leaks timing.</p>
+                <div className="mt-2">
+                    <CodeTabs blocks={WEBHOOK_VERIFY} />
+                </div>
             </Section>
 
             <Section icon={<Terminal size={18} />} title="5. Poll for status (alternative to webhook)">
-                <pre className="bg-black text-green-400 font-mono text-[11px] p-3 border-2 border-black overflow-x-auto leading-relaxed">{`GET /pay/v1/orders/<order_id>
-Authorization: Bearer gxp_live_…
-
-→ same shape as the create response, plus tx_hash and confirmed_at when paid`}</pre>
+                <CodeBlock code={STATUS_POLL} />
             </Section>
 
             <div className="border-t-2 border-black dark:border-white pt-6">
@@ -98,3 +203,43 @@ const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.
         </div>
     </section>
 );
+
+const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
+    const [copied, setCopied] = useState(false);
+    const copy = () => {
+        navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+    return (
+        <div className="relative group">
+            <pre className="bg-black text-green-400 font-mono text-[11px] p-3 pr-12 border-2 border-black overflow-x-auto leading-relaxed">{code}</pre>
+            <button onClick={copy} title="Copy"
+                className="absolute top-2 right-2 p-1.5 bg-zinc-800 text-gray-300 hover:bg-monero-orange hover:text-white border border-zinc-600 transition-colors">
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+            </button>
+        </div>
+    );
+};
+
+const CodeTabs: React.FC<{ blocks: Record<Lang, string> }> = ({ blocks }) => {
+    const [lang, setLang] = useState<Lang>('curl');
+    const tabs: { id: Lang; label: string }[] = [
+        { id: 'curl', label: 'curl' },
+        { id: 'node', label: 'Node' },
+        { id: 'python', label: 'Python' },
+    ];
+    return (
+        <div>
+            <div className="flex gap-0">
+                {tabs.map(t => (
+                    <button key={t.id} onClick={() => setLang(t.id)}
+                        className={`font-mono text-[10px] font-bold uppercase px-3 py-1.5 border-2 border-black dark:border-white border-b-0 ${lang === t.id ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-zinc-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'}`}>
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+            <CodeBlock code={blocks[lang]} />
+        </div>
+    );
+};

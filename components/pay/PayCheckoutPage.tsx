@@ -59,7 +59,9 @@ export const PayCheckoutPage: React.FC = () => {
                     if (['paid', 'expired', 'cancelled'].includes(data.status)) {
                         clearInterval(id);
                         if (data.status === 'paid' && data.redirect_url) {
-                            setTimeout(() => { window.location.href = data.redirect_url; }, 2500);
+                            // replace, not assign, so the back button doesn't return to a
+                            // mid-checkout state after the buyer lands on the merchant page.
+                            setTimeout(() => { window.location.replace(data.redirect_url); }, 2500);
                         }
                     }
                 }

@@ -22,7 +22,6 @@ export const PayLoginPage: React.FC = () => {
             const data = await r.json();
             if (!r.ok) throw new Error(data.error || 'Login failed');
             localStorage.setItem('goxmr_pay_token', data.token);
-            localStorage.setItem('goxmr_pay_merchant_id', String(data.merchant_id));
             navigate('/pay/dashboard');
         } catch (e: any) {
             setError(e.message);

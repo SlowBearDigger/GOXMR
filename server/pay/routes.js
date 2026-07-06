@@ -11,7 +11,7 @@ const {
     generateApiKey, hashApiKey, maskApiKey,
     hashPassword, verifyPassword,
     generateWebhookSecret, signWebhook,
-    apiKeyAuth, isValidSigningPubkey,
+    apiKeyAuth, isValidSigningPubkey, verifyPaymentSignature, paymentRequestMessage,
 } = require('./auth');
 const { pool: walletPool } = require('./wallet_scanner');
 const { nodePool } = require('../monero/nodePool');
@@ -308,33 +308,66 @@ function mountPayRoutes(app, deps) {
             if (typeof amount_xmr !== 'number' || amount_xmr <= 0 || amount_xmr > 100) {
                 return res.status(400).json({ error: 'amount_xmr must be a positive number <= 100' });
             }
-            if (!req.merchant.monero_address) {
-                return res.status(400).json({ error: 'merchant has no Monero address configured. Visit the dashboard.' });
-            }
-            if (!req.merchant.private_view_key_enc) {
-                return res.status(400).json({ error: 'merchant has no view key configured. Visit the dashboard.' });
+
+            const clientMode = req.merchant.scan_mode === 'client';
+            let orderId, subaddress, subaddressIndex, paymentSignature = null;
+
+            if (clientMode) {
+                // client mode: the merchant's own client holds the view key + signing
+                // key (we never see either), derives the subaddress, and signs the
+                // request. we can't derive anything without the view key, so we only
+                // verify the signature and store — a compromised gateway can't forge
+                // an order for a swapped address.
+                if (!req.merchant.signing_pubkey) {
+                    return res.status(400).json({ error: 'client mode requires a signing_pubkey. Set it in the dashboard.' });
+                }
+                const { order_id, payment_address, payment_subaddress_index, signature } = req.body || {};
+                if (typeof order_id !== 'string' || !/^ord_[A-Za-z0-9_-]{16,64}$/.test(order_id)) {
+                    return res.status(400).json({ error: 'order_id must be client-generated and match ord_[A-Za-z0-9_-]{16,64}' });
+                }
+                if (!isValidMoneroAddress(payment_address)) {
+                    return res.status(400).json({ error: 'payment_address must be a valid mainnet address' });
+                }
+                if (!Number.isInteger(payment_subaddress_index) || payment_subaddress_index < 0) {
+                    return res.status(400).json({ error: 'payment_subaddress_index must be a non-negative integer' });
+                }
+                const message = paymentRequestMessage({ order_id, amount_xmr, payment_address });
+                if (!verifyPaymentSignature(req.merchant.signing_pubkey, message, signature)) {
+                    return res.status(400).json({ error: 'signature does not verify against your signing_pubkey' });
+                }
+                const dup = await dbGet('SELECT 1 FROM pay_orders WHERE order_id = ?', [order_id]);
+                if (dup) return res.status(409).json({ error: 'order_id already exists' });
+                orderId = order_id;
+                subaddress = payment_address;
+                subaddressIndex = payment_subaddress_index;
+                paymentSignature = signature;
+            } else {
+                // hosted mode: we hold the view key, so we derive a fresh subaddress
+                // per order ourselves. the WalletPool persists the index in the wallet
+                // keys file so we never collide across restarts.
+                if (!req.merchant.monero_address) {
+                    return res.status(400).json({ error: 'merchant has no Monero address configured. Visit the dashboard.' });
+                }
+                if (!req.merchant.private_view_key_enc) {
+                    return res.status(400).json({ error: 'merchant has no view key configured. Visit the dashboard.' });
+                }
+                try {
+                    const result = await walletPool.nextSubaddress(req.merchant);
+                    subaddress = result.address;
+                    subaddressIndex = result.index;
+                } catch (walletErr) {
+                    logError('PAY_SUBADDRESS', walletErr, { merchantId: req.merchant.id });
+                    return res.status(503).json({ error: 'Failed to derive payment address. Try again in a moment.' });
+                }
+                orderId = newId('ord');
             }
 
-            // derive a fresh subaddress for this order from the merchant's wallet.
-            // the WalletPool persists the index in the wallet keys file so we can
-            // never collide across restarts.
-            let subaddress, subaddressIndex;
-            try {
-                const result = await walletPool.nextSubaddress(req.merchant);
-                subaddress = result.address;
-                subaddressIndex = result.index;
-            } catch (walletErr) {
-                logError('PAY_SUBADDRESS', walletErr, { merchantId: req.merchant.id });
-                return res.status(503).json({ error: 'Failed to derive payment address. Try again in a moment.' });
-            }
-
-            const orderId = newId('ord');
             const expiresAt = new Date(Date.now() + ORDER_TTL_SECONDS * 1000).toISOString();
             await dbRun(
                 `INSERT INTO pay_orders
-                 (order_id, merchant_id, external_order_id, amount_xmr, payment_address, payment_subaddress_index, redirect_url, metadata, expires_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [orderId, req.merchant.id, external_order_id || null, amount_xmr, subaddress, subaddressIndex,
+                 (order_id, merchant_id, external_order_id, amount_xmr, payment_address, payment_subaddress_index, payment_signature, redirect_url, metadata, expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [orderId, req.merchant.id, external_order_id || null, amount_xmr, subaddress, subaddressIndex, paymentSignature,
                  redirect_url || null, metadata ? JSON.stringify(metadata).slice(0, 4000) : null, expiresAt]
             );
             res.json({
@@ -343,6 +376,7 @@ function mountPayRoutes(app, deps) {
                 payment_subaddress_index: subaddressIndex,
                 amount_xmr,
                 status: 'pending',
+                scan_mode: clientMode ? 'client' : 'hosted',
                 expires_at: expiresAt,
                 checkout_url: `https://goxmr.click/pay/checkout/${orderId}`,
                 qr_data: `monero:${subaddress}?tx_amount=${amount_xmr}`,

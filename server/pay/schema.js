@@ -57,6 +57,7 @@ function applyPaySchema(db) {
             amount_xmr REAL NOT NULL,
             payment_address TEXT NOT NULL,
             payment_subaddress_index INTEGER,
+            payment_signature TEXT,
             status TEXT DEFAULT 'pending',
             tx_hash TEXT,
             confirmations INTEGER DEFAULT 0,
@@ -72,6 +73,8 @@ function applyPaySchema(db) {
         db.run('CREATE INDEX IF NOT EXISTS idx_pay_orders_merchant ON pay_orders(merchant_id, created_at DESC)');
         db.run('CREATE INDEX IF NOT EXISTS idx_pay_orders_status ON pay_orders(status, expires_at)');
         db.run('CREATE INDEX IF NOT EXISTS idx_pay_orders_addr ON pay_orders(payment_address)');
+        // additive: payment_signature holds the merchant's Ed25519 sig for client-mode orders.
+        db.run(`ALTER TABLE pay_orders ADD COLUMN payment_signature TEXT`, () => {});
 
         db.run(`CREATE TABLE IF NOT EXISTS pay_webhook_deliveries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
